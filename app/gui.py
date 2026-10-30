@@ -18,6 +18,7 @@ from dotenv import dotenv_values
 BASE = os.path.dirname(sys.executable if getattr(sys, "frozen", False) else os.path.abspath(__file__))
 os.chdir(BASE)
 ENV = os.path.join(BASE, ".env")
+INSTALACAO = os.path.join(BASE, "instalacao.env")   # deixado pelo instalador (endereço do painel e chave)
 PASTA_INSPECAO = os.path.join(BASE, "inspecoes")
 
 import bandeja  # noqa: E402
@@ -111,10 +112,17 @@ class Painel(tk.Tk):
         self.gestao: Gestao | None = None
         self.vars: dict[str, tk.StringVar] = {}
         cfg = dotenv_values(ENV) if os.path.exists(ENV) else {}
+        if os.path.exists(INSTALACAO):
+            cfg.update({k: v for k, v in dotenv_values(INSTALACAO).items() if k in ("GESTAO_URL", "GESTAO_CHAVE") and v})
         for grupo in CAMPOS.values():
             for chave, _, padrao, _ in grupo:
                 self.vars[chave] = tk.StringVar(value=cfg.get(chave) or padrao)
         self._publicar_config()
+        if os.path.exists(INSTALACAO):
+            self.salvar(reconectar=False)  # guarda no .env; a gestão conecta logo abaixo
+            with contextlib.suppress(OSError):
+                os.remove(INSTALACAO)
+            log.info("Chave do instalador aplicada.")
 
         self._cabecalho()
         abas = ttk.Notebook(self)
@@ -146,8 +154,11 @@ class Painel(tk.Tk):
 
         self.after(200, self._puxar_log)
         self._iniciar_gestao()
+        self._canais_em_uso = None
+        self._reiniciar = False
         if self._tem_telegram() or self._tem_whatsapp():
             self.after(500, self.iniciar)  # inicia sozinho se já configurado
+        self.after(5000, self._vigiar_canais)  # ou quando as credenciais chegarem do painel web
         if minimizado:
             self.after(100, self.bandeja.esconder)
 
@@ -207,8 +218,9 @@ class Painel(tk.Tk):
 
     def _aba_gestao(self, pai):
         f = self._aba_campos(pai, "gestao", "SERVIDOR DE GESTÃO",
-                             "Opcional. Com o servidor, a empresa, os comandos liberados e as pessoas "
-                             "permitidas (WhatsApp e Telegram) são definidos no painel web.")
+                             "Com o servidor, a empresa, os comandos liberados, as credenciais do WhatsApp "
+                             "e do Telegram e as pessoas permitidas vêm do painel web. O instalador já "
+                             "preenche esta aba.")
         self.lb_gestao = ttk.Label(f, text="Status: não configurado", style="Dica.TLabel", wraplength=700)
         self.lb_gestao.grid(row=20, column=0, columnspan=2, sticky="w", pady=(10, 0))
         return f
@@ -250,21 +262,42 @@ class Painel(tk.Tk):
         for chave in ("DEVMASTER_USER", "DEVMASTER_PASS", "DEVMASTER_ATALHO"):
             os.environ[chave] = valores[chave]
 
+    @staticmethod
+    def _canais():
+        """Credenciais em uso (servidor de gestão por cima das deste computador)."""
+        return CONFIG.evolution(), CONFIG.telegram_token()
+
     def _tem_telegram(self):
-        return bool(self._v("TELEGRAM_TOKEN"))
+        return bool(CONFIG.telegram_token())
 
     def _tem_whatsapp(self):
-        return bool(self._v("EVO_URL") and self._v("EVO_INSTANCIA") and self._v("EVO_KEY"))
+        url, instancia, chave, _ = CONFIG.evolution()
+        return bool(url and instancia and chave)
 
-    def salvar(self):
+    def _vigiar_canais(self):
+        """Aplica sozinho as credenciais que chegam do painel web: inicia ou reinicia os canais."""
+        atual = self._canais()
+        if atual != self._canais_em_uso:
+            if self.bot or self.zap:
+                log.info("Credenciais do WhatsApp/Telegram mudaram: reiniciando os canais.")
+                self.parar()
+                self._reiniciar = True
+            elif self._tem_telegram() or self._tem_whatsapp():
+                self.iniciar()
+        if self._reiniciar and not (self.bot or self.zap):
+            self._reiniciar = False
+            self.iniciar()
+        self.after(5000, self._vigiar_canais)
+
+    def salvar(self, reconectar=True):
         with open(ENV, "w", encoding="utf-8") as fp:
             for grupo in CAMPOS.values():
                 for chave, *_ in grupo:
                     fp.write(f"{chave}={self._v(chave)}\n")
         self._publicar_config()
         log.info("Configuração salva.")
-        if self.gestao is None or (self.gestao.url, self.gestao.chave) != (self._v("GESTAO_URL").rstrip("/"),
-                                                                           self._v("GESTAO_CHAVE")):
+        if reconectar and (self.gestao is None or (self.gestao.url, self.gestao.chave) != (
+                self._v("GESTAO_URL").rstrip("/"), self._v("GESTAO_CHAVE"))):
             self._iniciar_gestao()
 
     # ---------------- Servidor de gestão ----------------
@@ -295,6 +328,10 @@ class Painel(tk.Tk):
                 texto += (f"\nEmpresa no DevMaster: {CONFIG.empresa_login() or '(padrão)'} · "
                           f"comandos: {nomes} · WhatsApp: {len(CONFIG.numeros_whatsapp())} números · "
                           f"Telegram: {len(CONFIG.ids_telegram())} IDs")
+                origem = [n for n, campo in (("WhatsApp", ("whatsapp", "apikey")), ("Telegram", ("telegram", "token")))
+                          if CONFIG._r(*campo)]
+                if origem:
+                    texto += f"\nCredenciais vindas do painel: {', '.join(origem)}"
         self.lb_gestao.config(text=texto)
 
     # ---------------- Atualização e início com o Windows ----------------
@@ -322,16 +359,17 @@ class Painel(tk.Tk):
             messagebox.showwarning("Iniciar", "Configure o WhatsApp ou o Telegram primeiro.")
             return
         self.salvar()
-        if self._tem_telegram():
+        self._canais_em_uso = self._canais()
+        (url, instancia, chave, menu), token = self._canais_em_uso
+        if token:
             try:
-                self.bot = Bot(self._v("TELEGRAM_TOKEN"))
+                self.bot = Bot(token)
                 threading.Thread(target=self._rodar, args=(self.bot.run, "bot"), daemon=True).start()
             except Exception as e:
                 self.bot = None
                 log.error("Telegram não iniciou: %s", e)
-        if self._tem_whatsapp():
-            self.zap = WhatsApp(self._v("EVO_URL"), self._v("EVO_INSTANCIA"), self._v("EVO_KEY"),
-                                self._v("WHATSAPP_MENU").lower() or "botoes")
+        if url and instancia and chave:
+            self.zap = WhatsApp(url, instancia, chave, menu)
             threading.Thread(target=self._rodar, args=(self.zap.run, "zap"), daemon=True).start()
         self._atualizar_status()
 

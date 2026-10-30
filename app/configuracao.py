@@ -65,6 +65,21 @@ class Configuracao:
         bruto = remoto if remoto is not None else re.split(r"[,;\n]+", self._local.get("WHATSAPP_NUMEROS", ""))
         return {so_digitos(x) for x in bruto if so_digitos(x)}
 
+    def _canal(self, remoto, local: str) -> str:
+        """Credencial de canal: a do servidor de gestão, se preenchida; senão a deste computador."""
+        valor = self._r(*remoto)
+        return str(valor).strip() if isinstance(valor, str) and valor.strip() else self._local.get(local, "").strip()
+
+    def evolution(self) -> tuple[str, str, str, str]:
+        """(url, instância, api key, formato do menu) do WhatsApp."""
+        return (self._canal(("whatsapp", "url"), "EVO_URL").rstrip("/"),
+                self._canal(("whatsapp", "instancia"), "EVO_INSTANCIA"),
+                self._canal(("whatsapp", "apikey"), "EVO_KEY"),
+                (self._canal(("whatsapp", "menu"), "WHATSAPP_MENU") or "botoes").lower())
+
+    def telegram_token(self) -> str:
+        return self._canal(("telegram", "token"), "TELEGRAM_TOKEN")
+
     def comandos_remotos(self) -> dict | None:
         """{nome: {titulo, descricao, arquivo}} liberados para este sistema, ou None
         (sem servidor: todos os comandos do programa)."""

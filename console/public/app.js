@@ -152,15 +152,50 @@ function confirmar(titulo, mensagem, rotulo, aoConfirmar) {
   ]);
 }
 
+// O instalador de cada sistema é montado aqui no navegador: o Setup.exe genérico + "endereço|chave" no fim do
+// arquivo (o instalador lê esse trecho). A chave não passa por nenhum servidor.
+const MARCA_INSTALADOR = "#DMB" + "KEY#";
+async function baixarInstalador(chave, botao) {
+  const texto = botao.textContent;
+  botao.disabled = true;
+  botao.textContent = "Preparando…";
+  try {
+    const r = await fetch("/api/instalador");
+    if (!r.ok) throw new Error("O instalador ainda não foi publicado (publique uma versão no GitHub).");
+    const base = new Uint8Array(await r.arrayBuffer());
+    const trecho = new TextEncoder().encode(`
+${MARCA_INSTALADOR}${location.origin}|${chave}${MARCA_INSTALADOR}
+`);
+    const arquivo = new Uint8Array(base.length + trecho.length);
+    arquivo.set(base);
+    arquivo.set(trecho, base.length);
+    const link = h("a", { href: URL.createObjectURL(new Blob([arquivo], { type: "application/octet-stream" })), download: "BotDevMaster-Setup.exe" });
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 60000);
+    aviso("Instalador baixado");
+  } catch (e) {
+    aviso(e.message, true);
+  } finally {
+    botao.disabled = false;
+    botao.textContent = texto;
+  }
+}
+
 function mostrarChave(chave, titulo = "Chave do sistema") {
   janela(titulo,
     h("div", {},
-      h("p", {}, "Copie e guarde agora: por segurança, esta chave não será mostrada de novo. Cole no campo “Chave deste sistema” do programa, junto com o endereço deste painel."),
+      h("p", {}, "Baixe o instalador abaixo: ele já leva esta chave e o endereço do painel, é só abrir no computador do cliente. Guarde a chave também: por segurança, ela não será mostrada de novo."),
       h("div", { class: "chave" }, h("code", {}, chave))),
-    (fechar) => [
-      h("button", { class: "btn sec", onclick: async () => { await navigator.clipboard.writeText(chave).catch(() => {}); aviso("Chave copiada"); } }, "Copiar"),
-      h("button", { class: "btn", onclick: fechar }, "Já guardei"),
-    ]);
+    (fechar) => {
+      const baixar = h("button", { class: "btn", onclick: () => baixarInstalador(chave, baixar) }, "Baixar instalador com esta chave");
+      return [
+        baixar,
+        h("button", { class: "btn sec", onclick: async () => { await navigator.clipboard.writeText(chave).catch(() => {}); aviso("Chave copiada"); } }, "Copiar chave"),
+        h("button", { class: "btn sec", onclick: fechar }, "Já guardei"),
+      ];
+    });
 }
 
 // ---------------- Login e estrutura ----------------
@@ -239,7 +274,7 @@ function escutarMudancas() {
     tempoRefresh = setTimeout(() => atualizadores.forEach((f) => f().catch(() => {})), 400);
   };
   canalRealtime = sb.channel("painel");
-  for (const tabela of ["empresas", "sistemas", "sistema_comandos", "contatos", "execucoes"]) {
+  for (const tabela of ["empresas", "sistemas", "sistema_comandos", "sistema_canais", "contatos", "execucoes"]) {
     canalRealtime.on("postgres_changes", { event: "*", schema: "public", table: tabela }, aoMudar);
   }
   canalRealtime.subscribe((estado) => aoVivo(estado === "SUBSCRIBED"));
@@ -366,9 +401,10 @@ async function paginaSistema(c, idTexto) {
     c.replaceChildren(h("div", { class: "card" }, h("h2", {}, "Cadastre uma empresa primeiro"), h("p", {}, "Todo sistema pertence a uma empresa."), h("a", { href: "#/empresas" }, "Ir para Empresas")));
     return;
   }
-  const [sistemaBD, comandosBD] = novo ? [null, []] : await Promise.all([
+  const [sistemaBD, comandosBD, canaisBD] = novo ? [null, [], null] : await Promise.all([
     q(sb.from("sistemas").select("*, empresas(nome)").eq("id", idTexto).maybeSingle()),
     q(sb.from("sistema_comandos").select("*").eq("sistema_id", idTexto)),
+    q(sb.from("sistema_canais").select("*").eq("sistema_id", idTexto).maybeSingle()),
   ]);
   if (!novo && !sistemaBD) { c.replaceChildren(h("div", { class: "card" }, "Sistema não encontrado.")); return; }
   const s = sistemaBD || { nome: "", empresa_id: empresas[0].id, ativo: true, empresa_devmaster: "Loja/Gerencial", modulo_devmaster: "Gestão Varejo Atacado" };
@@ -378,6 +414,14 @@ async function paginaSistema(c, idTexto) {
   const dmEmpresa = h("input", { type: "text", id: "sde", value: s.empresa_devmaster, maxlength: 80 });
   const dmModulo = h("input", { type: "text", id: "sdm", value: s.modulo_devmaster, maxlength: 80 });
   const ativo = h("input", { type: "checkbox", checked: !!s.ativo });
+  const cn = canaisBD || { evo_url: "", evo_instancia: "", evo_key: "", whatsapp_menu: "botoes", telegram_token: "" };
+  const evoUrl = h("input", { type: "url", id: "seu", value: cn.evo_url, maxlength: 300, placeholder: "https://evolution.seudominio.com.br" });
+  const evoInst = h("input", { type: "text", id: "sei", value: cn.evo_instancia, maxlength: 120 });
+  const evoKey = h("input", { type: "password", id: "sek", value: cn.evo_key, maxlength: 300, autocomplete: "off" });
+  const zapMenu = h("select", { id: "szm" }, h("option", { value: "botoes", selected: cn.whatsapp_menu !== "texto" }, "Botões / lista"), h("option", { value: "texto", selected: cn.whatsapp_menu === "texto" }, "Texto"));
+  const tgToken = h("input", { type: "password", id: "stt", value: cn.telegram_token, maxlength: 80, autocomplete: "off", placeholder: "123456789:AA…" });
+  const canais = () => ({ evo_url: evoUrl.value.trim().replace(/\/+$/, ""), evo_instancia: evoInst.value.trim(), evo_key: evoKey.value.trim(), whatsapp_menu: zapMenu.value, telegram_token: tgToken.value.trim() });
+  const salvarCanais = (id) => q(sb.from("sistema_canais").upsert({ sistema_id: id, ...canais() }));
 
   const marcados = new Map(comandosBD.map((x) => [x.comando, x]));
   const blocos = catalogo.map((info) => {
@@ -392,11 +436,13 @@ async function paginaSistema(c, idTexto) {
     if (!nome.value.trim()) throw new Error("Informe o nome do sistema");
     if (novo) {
       const r = await q(sb.rpc("criar_sistema", { p_empresa_id: empresa.value, p_nome: nome.value.trim(), p_empresa_devmaster: dmEmpresa.value.trim(), p_modulo_devmaster: dmModulo.value.trim(), p_comandos: comandos() }));
+      await salvarCanais(r.id);
       location.hash = `#/sistema/${r.id}`;
       mostrarChave(r.chave, "Sistema criado");
     } else {
       await q(sb.from("sistemas").update({ empresa_id: empresa.value, nome: nome.value.trim(), ativo: ativo.checked, empresa_devmaster: dmEmpresa.value.trim(), modulo_devmaster: dmModulo.value.trim() }).eq("id", s.id));
       await q(sb.rpc("salvar_comandos", { p_sistema_id: s.id, p_comandos: comandos() }));
+      await salvarCanais(s.id);
       aviso("Sistema salvo");
     }
   });
@@ -410,6 +456,12 @@ async function paginaSistema(c, idTexto) {
         h("div", {}, h("label", { for: "sde" }, "Empresa no login do DevMaster"), dmEmpresa), h("div", {}, h("label", { for: "sdm" }, "Módulo no login do DevMaster"), dmModulo)),
       h("p", { class: "mudo" }, "O robô escolhe esta empresa e este módulo na tela de login do DevMaster, e só depois gera o arquivo."),
       h("label", { class: "marcar" }, ativo, "Sistema ativo (desmarcar bloqueia os comandos na hora)")),
+    h("div", { class: "card" }, h("h2", {}, "WhatsApp e Telegram"),
+      h("div", { class: "campos" },
+        h("div", {}, h("label", { for: "seu" }, "URL da Evolution API"), evoUrl), h("div", {}, h("label", { for: "sei" }, "Instância"), evoInst),
+        h("div", {}, h("label", { for: "sek" }, "API key da Evolution"), evoKey), h("div", {}, h("label", { for: "szm" }, "Menu no WhatsApp"), zapMenu),
+        h("div", {}, h("label", { for: "stt" }, "Token do bot do Telegram"), tgToken)),
+      h("p", { class: "mudo" }, "Vão para o programa junto com a chave: no cliente só é preciso instalar e colar a chave. Deixe em branco o canal que não usa.")),
     h("div", { class: "card" }, h("h2", {}, "Arquivos que este sistema gera"),
       blocos.map((b) => h("div", { class: "linha" }, h("label", { class: "marcar fixo" }, b.marca, h("b", {}, b.info.comando)),
         h("div", {}, h("label", {}, "Texto do botão"), b.titulo), h("div", {}, h("label", {}, "Nome do arquivo (.xlsx)"), b.arquivo))),

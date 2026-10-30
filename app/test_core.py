@@ -56,6 +56,16 @@ class TestConfiguracao(Base):
         with self.assertRaises(comandos.Desativado):
             comandos.executar("estoque")
 
+    def test_credenciais_do_painel_tem_prioridade(self):
+        CONFIG.definir_local({"EVO_URL": "http://local/", "EVO_INSTANCIA": "loja", "EVO_KEY": "k1",
+                              "TELEGRAM_TOKEN": "111:local"})
+        self.assertEqual(CONFIG.evolution(), ("http://local", "loja", "k1", "botoes"))
+        CONFIG.definir_remota({"whatsapp": {"url": "https://evo.exemplo/", "instancia": "", "apikey": "k2",
+                                            "menu": "texto"}, "telegram": {"token": "222:painel"}})
+        # vazio no painel = usa o deste computador
+        self.assertEqual(CONFIG.evolution(), ("https://evo.exemplo", "loja", "k2", "texto"))
+        self.assertEqual(CONFIG.telegram_token(), "222:painel")
+
     def test_assinatura(self):
         self.assertTrue(assinar("oi").endswith("— Bot DevMaster"))
         self.assertTrue(assinar("oi", italico=True).endswith("_Bot DevMaster_"))

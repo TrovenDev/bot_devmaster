@@ -24,13 +24,12 @@ WhatsApp / Telegram  →  Bot DevMaster (.exe no servidor Windows)  →  DevMast
 
 ## Instalar (no servidor Windows)
 
-1. Baixe o `DevMasterBot.exe` da [última release](../../releases/latest) e coloque em uma pasta, por exemplo `C:\BotDevMaster\`.
-2. Abra e preencha as abas (ou apenas **Gestão**, se usar o console web):
-   - **Gestão:** endereço do console e a chave do sistema (criada no console).
-   - **WhatsApp:** URL, instância e API key da Evolution API.
-   - **Telegram:** token do bot.
-   - **DevMaster:** usuário e senha, empresa e módulo do login.
-3. **Iniciar**. Marque "Abrir junto com o Windows" para subir sozinho já na bandeja.
+1. No console, cadastre o sistema e preencha **WhatsApp e Telegram** (URL, instância e API key da Evolution API; token do bot).
+2. Ao criar o sistema (ou gerar nova chave), clique em **Baixar instalador com esta chave**: o `BotDevMaster-Setup.exe` da Troven já leva a chave e o endereço do painel.
+3. Execute no servidor (não pede administrador). O programa abre sozinho, busca WhatsApp, Telegram, comandos e contatos pela chave e atualiza sozinho.
+4. Na aba **DevMaster** do programa, informe usuário e senha do login do DevMaster (ficam só neste computador).
+
+Sem o console, baixe o instalador genérico da [última release](../../releases/latest) e cole a chave quando ele pedir (ou `/CHAVE=... /PAINEL=...` no modo silencioso). Marque "Abrir junto com o Windows" para subir sozinho já na bandeja. Marque "Abrir junto com o Windows" para subir sozinho já na bandeja.
 
 As configurações ficam em um `.env` ao lado do `.exe` (modelo em [`.env.example`](.env.example)). O programa precisa
 de uma sessão do Windows aberta e desbloqueada, porque opera a tela do DevMaster.
@@ -40,7 +39,7 @@ de uma sessão do Windows aberta e desbloqueada, porque opera a tela do DevMaste
 ```bash
 pip install -r requirements-build.txt
 python app/gui.py                      # roda o painel
-python scripts/build_windows.py        # gera dist/DevMasterBot.exe
+python scripts/build_windows.py        # gera dist/DevMasterBot.exe e dist/BotDevMaster-Setup.exe (precisa do Inno Setup 6)
 ```
 
 Para criar um comando novo: escreva a função em `app/devmaster.py` (devolve o caminho do arquivo gerado),

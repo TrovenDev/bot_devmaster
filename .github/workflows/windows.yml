@@ -25,13 +25,16 @@ jobs:
         run: |
           $versao = python -c "import runpy; print(runpy.run_path('app/versao.py')['VERSION'])"
           if ($env:GITHUB_REF_NAME -ne "v$versao") { throw "A tag $env:GITHUB_REF_NAME deve ser igual a v$versao (app/versao.py)" }
-      - name: Gerar o executável
+      - name: Instalar o Inno Setup
+        run: choco install innosetup --no-progress -y
+      - name: Gerar o executável e o instalador
         run: python scripts/build_windows.py
       - uses: actions/upload-artifact@v4
         with:
           name: DevMasterBot-Windows
           path: |
             dist/DevMasterBot.exe
+            dist/BotDevMaster-Setup.exe
             dist/SHA256SUMS.txt
       - name: Publicar a release (atualização automática)
         if: startsWith(github.ref, 'refs/tags/')
@@ -41,4 +44,4 @@ jobs:
         run: |
           gh release view $env:GITHUB_REF_NAME *> $null
           if ($LASTEXITCODE -eq 0) { Write-Output 'Esta versão já foi publicada.'; exit 0 }
-          gh release create $env:GITHUB_REF_NAME dist/DevMasterBot.exe dist/SHA256SUMS.txt --title "Bot DevMaster $env:GITHUB_REF_NAME" --generate-notes --verify-tag
+          gh release create $env:GITHUB_REF_NAME dist/DevMasterBot.exe dist/BotDevMaster-Setup.exe dist/SHA256SUMS.txt --title "Bot DevMaster $env:GITHUB_REF_NAME" --generate-notes --verify-tag
