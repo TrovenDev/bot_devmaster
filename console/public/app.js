@@ -163,9 +163,9 @@ async function baixarInstalador(chave, botao) {
     const r = await fetch("/api/instalador");
     if (!r.ok) throw new Error("O instalador ainda não foi publicado (publique uma versão no GitHub).");
     const base = new Uint8Array(await r.arrayBuffer());
-    const trecho = new TextEncoder().encode(`
+    const trecho = chave ? new TextEncoder().encode(`
 ${MARCA_INSTALADOR}${location.origin}|${chave}${MARCA_INSTALADOR}
-`);
+`) : new Uint8Array();
     const arquivo = new Uint8Array(base.length + trecho.length);
     arquivo.set(base);
     arquivo.set(trecho, base.length);
@@ -496,7 +496,10 @@ async function paginaSistema(c, idTexto) {
 }
 
 function conteudoChave(s) {
-  return [h("h2", {}, "Chave de acesso"),
+  const baixar = h("button", { class: "btn", onclick: () => baixarInstalador(null, baixar) }, "Baixar instalador (.exe)");
+  return [h("h2", {}, "Instala\u00e7\u00e3o e acesso"),
+    baixar,
+    h("p", { class: "mudo" }, "Instale no Windows e informe a chave deste sistema. Para baixar um instalador j\u00e1 configurado, gere uma nova chave e use o download exibido na confirma\u00e7\u00e3o."),
     h("p", {}, "Final ", h("span", { class: "mono" }, `••••${s.chave_final}`), " · criada ", quando(s.chave_criada_em)),
     s.computador ? h("p", { class: "mudo" }, `Computador: ${s.computador} · versão ${s.versao || "?"} · ${estaOnline(s) ? "online" : "offline"} (${quando(s.ultimo_contato)})`) : h("p", { class: "mudo" }, "O programa ainda não se conectou."),
     h("button", { class: "btn sec", onclick: () => confirmar("Gerar nova chave", "A chave atual para de funcionar na hora. Você precisará colar a nova no programa deste cliente.", "Gerar nova chave",
