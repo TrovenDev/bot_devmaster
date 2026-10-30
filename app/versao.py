@@ -1,5 +1,5 @@
 """Versão do programa. Cada release no GitHub usa a tag v<VERSION> (ex.: v1.0.0)."""
-VERSION = "1.1.5"
+VERSION = "1.1.6"
 REPOSITORY = "TrovenDev/bot_devmaster"
 NOME = "Bot DevMaster"      # nome do programa e assinatura das mensagens
 

@@ -85,12 +85,16 @@ def main():
     args = argparse.ArgumentParser(description=__doc__)
     args.add_argument("--sem-instalador", action="store_true", help="gera só o DevMasterBot.exe")
     opcoes = args.parse_args()
+    # Nao publique um executavel sem interface: o sandbox pode impedir a leitura de Tcl/Tk.
+    subprocess.run([sys.executable, "-c", "import tkinter; r=tkinter.Tk(); r.withdraw(); r.update_idletasks(); r.destroy()"], check=True)
     sep = os.pathsep  # separador de --add-data (";" no Windows)
     cmd = [
-        sys.executable, "-m", "PyInstaller", "--noconfirm", "--onefile", "--windowed",
+        sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onefile", "--windowed",
         "--name", "DevMasterBot", "--icon", str(APP / "assets" / "troven-app.ico"),
         "--paths", str(APP),
         "--collect-data", "certifi",
+        "--hidden-import", "tkinter", "--hidden-import", "tkinter.ttk",
+        "--hidden-import", "tkinter.messagebox", "--hidden-import", "tkinter.scrolledtext",
         "--add-data", f"{APP / 'assets'}{sep}assets",
         "--hidden-import", "win32ui", "--hidden-import", "pystray._win32",
         "--distpath", str(DIST), "--workpath", str(RAIZ / "build"), "--specpath", str(RAIZ / "build"),
@@ -106,6 +110,13 @@ def main():
         else:
             print("aviso: não achei", dll)
     subprocess.run(cmd + [str(APP / "gui.py")], cwd=RAIZ, check=True)
+
+    from PyInstaller.archive.readers import CArchiveReader, ZlibArchiveReader
+    pacote = CArchiveReader(str(DIST / "DevMasterBot.exe"))
+    modulos = ZlibArchiveReader(str(RAIZ / "build" / "DevMasterBot" / "PYZ-00.pyz"))
+    obrigatorios = {"tkinter", "tkinter.ttk", "tkinter.messagebox", "tkinter.scrolledtext"}
+    if not obrigatorios.issubset(modulos.toc) or not any(n.endswith("init.tcl") for n in pacote.toc):
+        raise RuntimeError("Build incompleto: Tkinter/Tcl nao foram incluidos. Nao publique este executavel.")
 
     arquivos = [DIST / "DevMasterBot.exe"]
     if not opcoes.sem_instalador:
