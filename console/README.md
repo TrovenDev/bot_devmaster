@@ -86,8 +86,8 @@ npm test             # testes da API do programa (Supabase simulado)
 ## Consulta de CNPJ (BrasilAPI)
 
 O cadastro consulta a BrasilAPI, sem chave de API, pelo endpoint
-`https://brasilapi.com.br/api/cnpj/v1/{cnpj}`. A rota `/api/cnpj/:cnpj`
-verifica a sessao Supabase e o acesso de administrador antes da consulta.
+`https://brasilapi.com.br/api/cnpj/v1/{cnpj}`. A consulta acontece diretamente no navegador, como no Vitalicia, sem depender
+de uma chamada externa pela funcao do Cloudflare.
 Nao e necessario configurar variaveis RAPIDAPI no Cloudflare.
 
 Como no Vitalicia, os nomes recebem tratamento de maiusculas, conectores e

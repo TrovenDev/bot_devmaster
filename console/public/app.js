@@ -311,6 +311,47 @@ async function paginaSistemas(c) {
   await carregar();
 }
 
+const CONECTORES = new Set(['de', 'da', 'do', 'das', 'dos', 'e', 'em', 'com', 'para', 'a', 'o'])
+const SIGLAS = new Set(['ltda', 'me', 'epp', 'mei', 'eireli', 'sa', 's/a', 'ei'])
+
+const VOGAIS = /[aeiouáéíóúâêôãõà]/i
+
+// Sigla/iniciais (JF, GHR, DBM): 2 a 4 letras e nenhuma vogal — continua em maiúsculo em vez de virar "Jf".
+function ehSigla(palavra) {
+  const letras = palavra.replace(/[.,/-]/g, '')
+  return /^[a-zà-ú]{2,4}$/i.test(letras) && !VOGAIS.test(letras)
+}
+
+// MEI e empresário individual vêm da Receita como "NOME 12345678000190": tira do começo e do fim do nome
+// o que for número (parte do CNPJ), sem mexer em números que fazem parte do nome de verdade.
+function tirarNumeroDoCnpj(texto, cnpj) {
+  const digitosCnpj = cnpj.replace(/\D/g, '')
+  const ehNumeroDoCnpj = (token) => {
+    const digitos = token.replace(/\D/g, '')
+    return digitos.length > 0 && /^[\d.\-/]+$/.test(token) && (digitos.length >= 6 || digitosCnpj.includes(digitos))
+  }
+  const palavras = texto.trim().split(/\s+/)
+  while (palavras.length > 1 && ehNumeroDoCnpj(palavras[palavras.length - 1])) palavras.pop()
+  while (palavras.length > 1 && ehNumeroDoCnpj(palavras[0])) palavras.shift()
+  return palavras.join(' ')
+}
+
+function paraTitleCase(texto) {
+  return texto
+    .toLowerCase()
+    .split(' ')
+    .filter(Boolean)
+    .map((palavra, i) => {
+      const semPontuacao = palavra.replace(/[.,/]/g, '')
+      if (SIGLAS.has(semPontuacao) || ehSigla(palavra)) return palavra.toUpperCase()
+      if (i > 0 && CONECTORES.has(palavra)) return palavra
+      return palavra.charAt(0).toUpperCase() + palavra.slice(1)
+    })
+    .join(' ')
+}
+
+
+
 async function paginaEmpresas(c) {
   const editar = (e = {}) => {
     const nome = h("input", { type: "text", id: "en", value: e.nome || "", maxlength: 120, required: true });
@@ -331,17 +372,18 @@ async function paginaEmpresas(c) {
       if (cnpj.length !== 14) { status.textContent = "Informe os 14 d\u00edgitos do CNPJ."; return; }
       status.textContent = "Consultando CNPJ\u2026";
       try {
-        const { data } = await sb.auth.getSession();
-        if (atual !== consulta) return;
-        const r = await fetch(`/api/cnpj/${cnpj}`, { headers: { Authorization: `Bearer ${data.session?.access_token || ""}` } });
+        const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, { signal: AbortSignal.timeout(15000) });
+        if (atual !== consulta || !doc.isConnected) return;
+        if (!r.ok) throw new Error(r.status === 404 ? "CNPJ n\u00e3o encontrado." : r.status === 429 ? "Limite de consultas atingido. Tente novamente mais tarde." : "Consulta de CNPJ indispon\u00edvel no momento.");
         const dados = await r.json();
         if (atual !== consulta || !doc.isConnected) return;
-        if (!r.ok) throw new Error(dados.erro || "N\u00e3o foi poss\u00edvel consultar o CNPJ.");
-        nome.value = dados.nome;
+        const encontrado = dados.nome_fantasia || dados.razao_social;
+        if (typeof encontrado !== "string" || !encontrado.trim()) throw new Error("A consulta n\u00e3o retornou o nome da empresa.");
+        nome.value = paraTitleCase(tirarNumeroDoCnpj(encontrado, cnpj)).slice(0, 120);
         status.textContent = "Empresa encontrada. Confira os dados antes de salvar.";
       } catch (erro) {
         if (atual !== consulta || !doc.isConnected) return;
-        status.textContent = erro.message;
+        status.textContent = erro.name === "TimeoutError" ? "A consulta demorou demais. Tente novamente." : /Failed to fetch|NetworkError/i.test(erro.message) ? "Sem conex\u00e3o com a BrasilAPI. Tente novamente." : erro.message;
         ultimoCnpj = "";
       }
     });
