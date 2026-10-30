@@ -124,12 +124,13 @@ function quando(iso) {
 
 const estaOnline = (s) => !!s.ultimo_contato && Date.now() - new Date(s.ultimo_contato).getTime() < ONLINE_MS;
 
-function janela(titulo, corpo, acoes, sheet = false) {
+function janela(titulo, corpo, acoes, sheet = false, dialogo = false) {
   const anterior = document.activeElement;
-  const painel = h("div", { class: sheet ? "janela sheet" : "janela", tabindex: "-1" });
+  const painel = h("div", { class: sheet ? "janela sheet" : dialogo ? "janela dialogo" : "janela", tabindex: "-1" });
   const fundo = h("div", { class: "fundo" + (sheet ? " fundo-sheet" : ""), role: "dialog", "aria-modal": "true", "aria-label": titulo }, painel);
   const fechar = () => { fundo.remove(); document.body.style.overflow = ""; anterior?.focus(); };
-  painel.append(h("div", { class: "sheet-topo" }, h("h2", {}, titulo), h("button", { class: "btn sec mini", "aria-label": "Fechar", onclick: fechar }, "\u00d7")), h("div", { class: "janela-corpo" }, corpo), h("div", { class: "acoes" }, acoes(fechar)));
+  if (dialogo) painel.append(h("div", { class: "janela-corpo" }, h("h2", {}, titulo), corpo), h("div", { class: "acoes" }, acoes(fechar)));
+  else painel.append(h("div", { class: "sheet-topo" }, h("h2", {}, titulo), h("button", { class: "fechar", "aria-label": "Fechar", onclick: fechar }, "\u00d7")), h("div", { class: "janela-corpo" }, corpo), h("div", { class: "acoes" }, acoes(fechar)));
   fundo.addEventListener("click", (e) => { if (e.target === fundo) fechar(); });
   fundo.addEventListener("keydown", (e) => {
     if (e.key === "Escape") fechar();
@@ -149,8 +150,12 @@ function confirmar(titulo, mensagem, rotulo, aoConfirmar) {
   janela(titulo, h("p", {}, mensagem), (fechar) => [
     h("button", { class: "btn sec", onclick: fechar }, "Cancelar"),
     h("button", { class: "btn perigo", onclick: () => { fechar(); aoConfirmar(); } }, rotulo),
-  ]);
+  ], false, true);
 }
+
+// Estado vazio: ícone, título, texto e (opcional) a ação que resolve.
+const estadoVazio = (titulo, texto, acao = null, compacto = false) => h("div", { class: "estado-vazio" + (compacto ? " compacto" : "") },
+  h("span", { class: "estado-vazio-icone", "aria-hidden": "true" }), h("h3", {}, titulo), texto ? h("p", { class: "mudo" }, texto) : null, acao);
 
 // O instalador de cada sistema é montado aqui no navegador: o Setup.exe genérico + "endereço|chave" no fim do
 // arquivo (o instalador lê esse trecho). A chave não passa por nenhum servidor.
@@ -242,22 +247,27 @@ function semAcesso(usuario) {
       h("button", { class: "btn sec", onclick: async () => { await sb.auth.signOut(); mostrarLogin(); } }, "Sair")))));
 }
 
-function estrutura(usuario) {
+function estrutura(usuario, nomeAdmin = "") {
   const link = (href, texto) => h("a", { href, "data-rota": href }, texto);
   const vivo = h("span", { class: "vivo", title: "Atualização em tempo real" }, "ao vivo");
   aoVivo = (ligado) => vivo.classList.toggle("ligado", ligado);
-  raiz.replaceChildren(
-    h("header", { class: "topo" },
-      h("img", { src: "/troven-horizontal-negativo.svg", alt: "Troven" }),
-      h("nav", {}, link("#/", "Sistemas"), link("#/empresas", "Empresas"), link("#/execucoes", "Execuções")),
-      vivo,
-      h("button", { title: usuario.email, onclick: async () => { await sb.auth.signOut(); mostrarLogin(); } }, "Sair")),
-    h("main", { id: "conteudo" }));
+  const exibicao = nomeAdmin || usuario.email.split("@")[0];
+  const iniciais = exibicao.split(/[\s._-]+/).filter(Boolean).slice(0, 2).map((x) => x[0]).join("").toUpperCase() || "?";
+  raiz.replaceChildren(h("div", { class: "app" },
+    h("aside", { class: "lateral" },
+      h("div", { class: "lateral-marca" }, h("img", { src: "/troven-horizontal-negativo.svg", alt: "Troven" })),
+      h("nav", { "aria-label": "Principal" }, link("#/", "Sistemas"), link("#/empresas", "Empresas"), link("#/execucoes", "Execuções")),
+      h("div", { class: "lateral-status" }, vivo),
+      h("div", { class: "perfil" },
+        h("span", { class: "avatar", "aria-hidden": "true" }, iniciais),
+        h("div", { class: "perfil-dados" }, h("b", {}, exibicao), h("span", { title: usuario.email }, usuario.email)),
+        h("button", { class: "perfil-sair", onclick: async () => { await sb.auth.signOut(); mostrarLogin(); } }, "Sair"))),
+    h("main", { id: "conteudo" })));
 }
 
 function marcarMenu() {
   const rota = location.hash || "#/";
-  for (const a of document.querySelectorAll(".topo nav a")) {
+  for (const a of document.querySelectorAll(".lateral nav a")) {
     const alvo = a.dataset.rota;
     a.classList.toggle("ativo", alvo === "#/" ? rota === "#/" || rota.startsWith("#/sistema") : rota.startsWith(alvo));
   }
@@ -305,7 +315,7 @@ async function paginaSistemas(c) {
         onkeydown: (e) => { if (e.key === "Enter") location.hash = `#/sistema/${s.id}`; } },
         h("td", {}, h("b", {}, s.nome)), h("td", {}, s.empresas?.nome), h("td", {}, seloSistema(s)),
         h("td", { class: "mono" }, s.versao || "—"), h("td", { class: "mudo" }, quando(s.ultimo_contato)))))
-      : h("div", { class: "vazio" }, "Nenhum sistema ainda. Cadastre uma empresa e crie o primeiro sistema."));
+      : estadoVazio("Nenhum sistema ainda", "Cadastre uma empresa e crie o primeiro sistema.", h("button", { class: "btn", onclick: () => (location.hash = "#/sistema/novo") }, "+ Novo sistema")));
   };
   atualizadores = [carregar];
   await carregar();
@@ -417,20 +427,14 @@ async function paginaEmpresas(c) {
     todos.indeterminate = visiveis.some(e => selecionados.has(e.id)) && !visiveis.every(e => selecionados.has(e.id));
     const cabecalho = (titulo, chave) => h("th", { scope: "col", "aria-sort": ordem === chave ? ascendente ? "ascending" : "descending" : "none" }, h("button", { class: "ordenar", onclick: () => { ascendente = ordem === chave ? !ascendente : true; ordem = chave; atualizar(); } }, titulo, ordem === chave ? ascendente ? " \u2191" : " \u2193" : ""));
     const tabelaEmpresas = h("table", { class: "empresas-tabela" },
-      h("thead", {}, h("tr", {}, h("th", { class: "col-selecao" }, todos), cabecalho("Nome", "nome"), cabecalho("CNPJ", "documento"), cabecalho("Sistemas", "sistemas"), cabecalho("Status", "ativa"))),
+      h("thead", {}, h("tr", {}, h("th", { class: "col-selecao" }, todos), cabecalho("Nome", "nome"), cabecalho("CNPJ", "documento"), cabecalho("Sistemas", "sistemas"), cabecalho("Situação", "ativa"))),
       h("tbody", {}, visiveis.map(e => {
-        const toggle = h("input", { type: "checkbox", role: "switch", class: "toggle", checked: !!e.ativa, "aria-label": `Empresa ${e.nome} ativa`, onchange: async () => {
-          toggle.disabled = true;
-          try { await q(sb.from("empresas").update({ ativa: toggle.checked }).eq("id", e.id)); e.ativa = toggle.checked; atualizar(); aviso("Status atualizado"); }
-          catch (erro) { toggle.checked = !!e.ativa; aviso(erro.message, true); }
-          finally { toggle.disabled = false; }
-        } });
         return h("tr", { class: selecionados.has(e.id) ? "selecionada" : "" },
           h("td", { class: "col-selecao" }, h("input", { type: "checkbox", checked: selecionados.has(e.id), "aria-label": `Selecionar ${e.nome}`, onchange: ev => selecionar(e.id, ev.target.checked) })),
           h("td", { "data-label": "Nome" }, h("button", { class: "empresa-nome", onclick: () => editar(e), title: "Editar empresa" }, e.nome), e.observacao ? h("div", { class: "mudo" }, e.observacao) : null),
           h("td", { "data-label": "CNPJ", class: "tabular" }, e.documento || "Sem cadastro"),
           h("td", { "data-label": "Sistemas", class: "tabular" }, e.sistemas?.[0]?.count ?? 0),
-          h("td", { "data-label": "Status" }, h("label", { class: "marcar toggle-label" }, toggle, h("span", {}, e.ativa ? "Ativa" : "Inativa"))));
+          h("td", { "data-label": "Situação" }, h("span", { class: "selo " + (e.ativa ? "ok" : "offline") }, e.ativa ? "Ativa" : "Inativa")));
       })));
     const ir = numero => { pagina = numero; atualizar(); };
     const paginas = [...new Set([1, pagina - 1, pagina, pagina + 1, total])].filter(n => n >= 1 && n <= total).sort((a,b) => a-b);
@@ -442,13 +446,13 @@ async function paginaEmpresas(c) {
     const rodape = h("div", { class: "empresas-paginacao" },
       h("nav", { "aria-label": "Pagina\u00e7\u00e3o de empresas" }, h("button", { "aria-label": "P\u00e1gina anterior", disabled: pagina === 1, onclick: () => ir(pagina-1) }, "\u2039"), botoesPaginas, h("button", { "aria-label": "Pr\u00f3xima p\u00e1gina", disabled: pagina === total, onclick: () => ir(pagina+1) }, "\u203a")),
       h("span", { class: "mudo" }, `${filtrados.length} ${filtrados.length === 1 ? "empresa" : "empresas"}`));
-    lista.replaceChildren(filtrados.length ? h("div", { class: "empresas-scroll" }, tabelaEmpresas) : h("div", { class: "empresas-vazio" }, h("h2", {}, "Nenhuma empresa"), h("p", { class: "mudo" }, termo ? "Nenhum resultado para esta busca." : "Adicione a primeira empresa para come\u00e7ar.")), rodape);
+    lista.replaceChildren(filtrados.length ? h("div", { class: "empresas-scroll" }, tabelaEmpresas) : estadoVazio(termo ? "Nenhum resultado" : "Nenhuma empresa", termo ? "Nada encontrado para esta busca." : "Adicione a primeira empresa para começar.", termo ? null : h("button", { class: "btn", onclick: () => editar() }, "+ Adicionar")), rodape);
     barraSelecao.hidden = !selecionados.size;
     barraSelecao.replaceChildren(h("span", {}, `${selecionados.size} ${selecionados.size === 1 ? "item selecionado" : "itens selecionados"}`),
       h("button", { class: "btn sec", onclick: () => { selecionados.clear(); atualizar(); } }, "Limpar sele\u00e7\u00e3o"),
       h("button", { class: "acao-excluir", onclick: () => {
         const ids = [...selecionados];
-        confirmar("Excluir empresas", `Excluir ${ids.length} ${ids.length === 1 ? "empresa selecionada" : "empresas selecionadas"}?`, "Excluir", () => tentar(async () => { await q(sb.from("empresas").delete().in("id", ids)); ids.forEach(id => selecionados.delete(id)); await carregar(); aviso("Empresas exclu?das"); }));
+        confirmar("Excluir empresas", `Excluir ${ids.length} ${ids.length === 1 ? "empresa selecionada" : "empresas selecionadas"}?`, "Excluir", () => tentar(async () => { await q(sb.from("empresas").delete().in("id", ids)); ids.forEach(id => selecionados.delete(id)); await carregar(); aviso("Empresas excluídas"); }));
       } }, "Excluir"));
   };
   busca.addEventListener("input", () => { pagina = 1; atualizar(); });
@@ -477,7 +481,7 @@ async function paginaExecucoes(c) {
   c.replaceChildren(h("div", { class: "cabeca" }, h("div", {}, h("div", { class: "sobre" }, "Histórico"), h("h1", {}, "Execuções"))), lista);
   const carregar = async () => {
     const dados = await q(sb.from("execucoes").select("*, sistemas(nome)").order("id", { ascending: false }).limit(200));
-    lista.replaceChildren(dados.length ? tabelaExecucoes(dados, true) : h("div", { class: "vazio" }, "Nenhuma execução registrada ainda."));
+    lista.replaceChildren(dados.length ? tabelaExecucoes(dados, true) : estadoVazio("Nenhuma execução ainda", "Os comandos pedidos por WhatsApp ou Telegram aparecem aqui."));
   };
   atualizadores = [carregar];
   await carregar();
@@ -487,7 +491,7 @@ async function paginaSistema(c, idTexto) {
   const novo = idTexto === "novo";
   const empresas = await q(sb.from("empresas").select("id, nome").order("nome"));
   if (!empresas.length) {
-    c.replaceChildren(h("div", { class: "card" }, h("h2", {}, "Cadastre uma empresa primeiro"), h("p", {}, "Todo sistema pertence a uma empresa."), h("a", { href: "#/empresas" }, "Ir para Empresas")));
+    c.replaceChildren(h("div", { class: "card" }, estadoVazio("Cadastre uma empresa primeiro", "Todo sistema pertence a uma empresa.", h("a", { class: "btn", href: "#/empresas" }, "Ir para Empresas"))));
     return;
   }
   const [sistemaBD, comandosBD, canaisBD] = novo ? [null, [], null] : await Promise.all([
@@ -495,14 +499,16 @@ async function paginaSistema(c, idTexto) {
     q(sb.from("sistema_comandos").select("*").eq("sistema_id", idTexto)),
     q(sb.from("sistema_canais").select("*").eq("sistema_id", idTexto).maybeSingle()),
   ]);
-  if (!novo && !sistemaBD) { c.replaceChildren(h("div", { class: "card" }, "Sistema não encontrado.")); return; }
+  if (!novo && !sistemaBD) { c.replaceChildren(h("div", { class: "card" }, estadoVazio("Sistema não encontrado", "Ele pode ter sido excluído.", h("a", { class: "btn", href: "#/" }, "← Voltar para Sistemas")))); return; }
   const s = sistemaBD || { nome: "", empresa_id: empresas[0].id, ativo: true, empresa_devmaster: "Loja/Gerencial", modulo_devmaster: "Gestão Varejo Atacado" };
 
   const nome = h("input", { type: "text", id: "sn", value: s.nome, maxlength: 120, required: true });
   const empresa = h("select", { id: "se" }, empresas.map((e) => h("option", { value: e.id, selected: e.id === s.empresa_id }, e.nome)));
   const dmEmpresa = h("input", { type: "text", id: "sde", value: s.empresa_devmaster, maxlength: 80 });
   const dmModulo = h("input", { type: "text", id: "sdm", value: s.modulo_devmaster, maxlength: 80 });
-  const ativo = h("input", { type: "checkbox", checked: !!s.ativo });
+  const ativo = h("input", { type: "checkbox", role: "switch", class: "toggle", id: "sa", checked: !!s.ativo });
+  const ativoTexto = h("span", {}, ativo.checked ? "Ativo" : "Inativo");
+  ativo.addEventListener("change", () => { ativoTexto.textContent = ativo.checked ? "Ativo" : "Inativo"; });
   const cn = canaisBD || { evo_url: "", evo_instancia: "", evo_key: "", whatsapp_menu: "botoes", telegram_token: "" };
   const evoUrl = h("input", { type: "url", id: "seu", value: cn.evo_url, maxlength: 300, placeholder: "https://evolution.seudominio.com.br" });
   const evoInst = h("input", { type: "text", id: "sei", value: cn.evo_instancia, maxlength: 120 });
@@ -521,41 +527,63 @@ async function paginaSistema(c, idTexto) {
   });
   const comandos = () => blocos.filter((b) => b.marca.checked).map((b) => ({ comando: b.info.comando, titulo: b.titulo.value.trim(), arquivo: b.arquivo.value.trim() }));
 
-  const salvar = () => tentar(async () => {
-    if (!nome.value.trim()) throw new Error("Informe o nome do sistema");
-    if (novo) {
-      const r = await q(sb.rpc("criar_sistema", { p_empresa_id: empresa.value, p_nome: nome.value.trim(), p_empresa_devmaster: dmEmpresa.value.trim(), p_modulo_devmaster: dmModulo.value.trim(), p_comandos: comandos() }));
-      await salvarCanais(r.id);
-      location.hash = `#/sistema/${r.id}`;
-      mostrarChave(r.chave, "Sistema criado");
-    } else {
-      await q(sb.from("sistemas").update({ empresa_id: empresa.value, nome: nome.value.trim(), ativo: ativo.checked, empresa_devmaster: dmEmpresa.value.trim(), modulo_devmaster: dmModulo.value.trim() }).eq("id", s.id));
-      await q(sb.rpc("salvar_comandos", { p_sistema_id: s.id, p_comandos: comandos() }));
-      await salvarCanais(s.id);
-      aviso("Sistema salvo");
-    }
-  });
+  const barra = h("div", { class: "barra-fixa", role: "region", "aria-label": "Ações do sistema", hidden: !novo });
+  const btnSalvar = h("button", { class: "btn", onclick: () => salvar() }, novo ? "Criar sistema e gerar chave" : "Salvar alterações");
+  const salvar = async () => {
+    btnSalvar.disabled = true;
+    const ok = await tentar(async () => {
+      if (!nome.value.trim()) { nome.focus(); throw new Error("Informe o nome do sistema"); }
+      if (novo) {
+        const r = await q(sb.rpc("criar_sistema", { p_empresa_id: empresa.value, p_nome: nome.value.trim(), p_empresa_devmaster: dmEmpresa.value.trim(), p_modulo_devmaster: dmModulo.value.trim(), p_comandos: comandos() }));
+        await salvarCanais(r.id);
+        location.hash = `#/sistema/${r.id}`;
+        mostrarChave(r.chave, "Sistema criado");
+      } else {
+        await q(sb.from("sistemas").update({ empresa_id: empresa.value, nome: nome.value.trim(), ativo: ativo.checked, empresa_devmaster: dmEmpresa.value.trim(), modulo_devmaster: dmModulo.value.trim() }).eq("id", s.id));
+        await q(sb.rpc("salvar_comandos", { p_sistema_id: s.id, p_comandos: comandos() }));
+        await salvarCanais(s.id);
+        aviso("Sistema salvo");
+      }
+      return true;
+    });
+    btnSalvar.disabled = false;
+    if (ok && !novo) barra.hidden = true;
+  };
+  barra.append(h("span", {}, novo ? "Preencha os dados para criar o sistema." : "Você tem alterações não salvas."),
+    h("div", { class: "barra-acoes" },
+      h("button", { class: "btn sec", onclick: () => (novo ? (location.hash = "#/") : rota()) }, novo ? "Cancelar" : "Descartar"), btnSalvar));
 
-  const partes = [
-    h("div", { class: "cabeca" }, h("div", {}, h("div", { class: "sobre" }, novo ? "Novo" : sistemaBD.empresas?.nome), h("h1", {}, novo ? "Novo sistema" : s.nome)),
-      h("a", { href: "#/" }, "← Voltar")),
+  const linhasComandos = catalogo.length
+    ? h("div", { class: "comandos" },
+      h("div", { class: "comandos-cab" }, h("span", {}, "Comando"), h("span", {}, "Texto do botão"), h("span", {}, "Nome do arquivo (.xlsx)")),
+      blocos.map((b) => h("div", { class: "comando-linha" },
+        h("label", { class: "marcar" }, b.marca, h("span", { class: "comando-nome" }, h("b", {}, b.info.titulo || b.info.comando), h("small", {}, b.info.comando))),
+        b.titulo, b.arquivo)))
+    : estadoVazio("Nenhum comando disponível", "O programa ainda não cadastrou comandos neste servidor.", null, true);
+
+  const formulario = h("div", { class: "formulario" },
     h("div", { class: "card" }, h("h2", {}, "Dados"),
       h("div", { class: "campos" },
         h("div", {}, h("label", { for: "sn" }, "Nome do sistema"), nome), h("div", {}, h("label", { for: "se" }, "Empresa"), empresa),
-        h("div", {}, h("label", { for: "sde" }, "Empresa no login do DevMaster"), dmEmpresa), h("div", {}, h("label", { for: "sdm" }, "Módulo no login do DevMaster"), dmModulo)),
-      h("p", { class: "mudo" }, "O robô escolhe esta empresa e este módulo na tela de login do DevMaster, e só depois gera o arquivo."),
-      h("label", { class: "marcar" }, ativo, "Sistema ativo (desmarcar bloqueia os comandos na hora)")),
+        h("div", {}, h("label", { for: "sde" }, "Empresa no login do DevMaster"), dmEmpresa), h("div", {}, h("label", { for: "sdm" }, "Módulo no login do DevMaster"), dmModulo),
+        novo ? null : h("div", {}, h("label", { for: "sa" }, "Situação"), h("label", { class: "marcar toggle-label" }, ativo, ativoTexto))),
+      h("p", { class: "mudo nota" }, "O robô escolhe esta empresa e este módulo na tela de login do DevMaster, e só depois gera o arquivo. Inativo bloqueia os comandos na hora.")),
     h("div", { class: "card" }, h("h2", {}, "WhatsApp e Telegram"),
       h("div", { class: "campos" },
         h("div", {}, h("label", { for: "seu" }, "URL da Evolution API"), evoUrl), h("div", {}, h("label", { for: "sei" }, "Instância"), evoInst),
         h("div", {}, h("label", { for: "sek" }, "API key da Evolution"), evoKey), h("div", {}, h("label", { for: "szm" }, "Menu no WhatsApp"), zapMenu),
         h("div", {}, h("label", { for: "stt" }, "Token do bot do Telegram"), tgToken)),
-      h("p", { class: "mudo" }, "Vão para o programa junto com a chave: no cliente só é preciso instalar e colar a chave. Deixe em branco o canal que não usa.")),
-    h("div", { class: "card" }, h("h2", {}, "Arquivos que este sistema gera"),
-      blocos.map((b) => h("div", { class: "linha" }, h("label", { class: "marcar fixo" }, b.marca, h("b", {}, b.info.comando)),
-        h("div", {}, h("label", {}, "Texto do botão"), b.titulo), h("div", {}, h("label", {}, "Nome do arquivo (.xlsx)"), b.arquivo))),
-      h("p", { class: "mudo" }, "Deixe em branco para usar o padrão. O arquivo é salvo em Downloads e enviado a quem pediu.")),
-    h("div", { class: "linha" }, h("button", { class: "btn fixo", onclick: salvar }, novo ? "Criar sistema e gerar chave" : "Salvar alterações")),
+      h("p", { class: "mudo nota" }, "Vão para o programa junto com a chave: no cliente só é preciso instalar. Deixe em branco o canal que não usa.")),
+    h("div", { class: "card" }, h("h2", {}, "Arquivos que este sistema gera"), linhasComandos,
+      h("p", { class: "mudo nota" }, "Deixe em branco para usar o padrão. O arquivo é salvo em Downloads e enviado a quem pediu.")));
+  const marcarAlterado = () => { barra.hidden = false; };
+  formulario.addEventListener("input", marcarAlterado);
+  formulario.addEventListener("change", marcarAlterado);
+
+  const partes = [
+    h("div", { class: "cabeca" }, h("div", {}, h("div", { class: "sobre" }, novo ? "Sistemas" : (sistemaBD.empresas?.nome || "Sistemas")), h("h1", {}, novo ? "Novo sistema" : s.nome)),
+      h("a", { class: "btn sec", href: "#/" }, "← Voltar")),
+    formulario, barra,
   ];
 
   if (novo) { c.replaceChildren(...partes); atualizadores = []; return; }
@@ -573,11 +601,11 @@ async function paginaSistema(c, idTexto) {
     if (!sis) { location.hash = "#/"; return; }
     areaChave.replaceChildren(...conteudoChave(sis));
     areaContatos.replaceChildren(...conteudoContatos(sis, contatos));
-    areaExec.replaceChildren(h("h2", {}, "Últimas execuções"), execs.length ? h("div", { class: "tabela-rolagem" }, tabelaExecucoes(execs, false)) : h("div", { class: "vazio" }, "Nada executado ainda."));
+    areaExec.replaceChildren(h("h2", {}, "Últimas execuções"), execs.length ? h("div", { class: "tabela-rolagem" }, tabelaExecucoes(execs, false)) : estadoVazio("Nada executado ainda", "Os comandos pedidos neste sistema aparecem aqui.", null, true));
   };
-  const risco = h("div", { class: "card" }, h("h2", {}, "Zona de risco"), h("button", { class: "btn perigo",
-    onclick: () => confirmar("Excluir sistema", `Excluir “${s.nome}”? O programa instalado perde o acesso imediatamente.`, "Excluir", () => tentar(async () => { await q(sb.from("sistemas").delete().eq("id", s.id)); aviso("Sistema excluído"); location.hash = "#/"; })) }, "Excluir este sistema"));
-  partes.splice(3, 0, areaChave, areaContatos, areaExec);
+  const risco = h("div", { class: "card risco" }, h("div", {}, h("h2", {}, "Zona de risco"), h("p", { class: "mudo" }, "Excluir apaga o sistema e a chave. O programa instalado perde o acesso na hora.")),
+    h("button", { class: "btn perigo fixo", onclick: () => confirmar("Excluir sistema", `Excluir “${s.nome}”? O programa instalado perde o acesso imediatamente.`, "Excluir", () => tentar(async () => { await q(sb.from("sistemas").delete().eq("id", s.id)); aviso("Sistema excluído"); location.hash = "#/"; })) }, "Excluir este sistema"));
+  partes.splice(2, 0, areaChave, areaContatos, areaExec);
   partes.push(risco);
   c.replaceChildren(...partes);
   atualizadores = [carregarVivo];
@@ -608,7 +636,7 @@ function conteudoContatos(s, contatos) {
       h("td", {}, h("div", { class: "linha" },
         h("button", { class: "btn sec mini fixo", onclick: () => tentar(async () => { await q(sb.from("contatos").update({ ativo: !x.ativo }).eq("id", x.id)); }) }, x.ativo ? "Pausar" : "Permitir"),
         h("button", { class: "btn perigo mini fixo", onclick: () => confirmar("Remover", `Remover ${x.nome || x.identificador}?`, "Remover", () => tentar(async () => { await q(sb.from("contatos").delete().eq("id", x.id)); })) }, "Remover"))))))
-      : h("div", { class: "vazio" }, "Ninguém cadastrado."));
+      : estadoVazio("Ninguém cadastrado", "Adicione abaixo quem pode pedir por este canal.", null, true));
   };
   return [h("h2", {}, "Quem pode pedir (números e IDs permitidos)"),
     h("div", { class: "tabela-rolagem" }, grupo("whatsapp", "WhatsApp"), grupo("telegram", "Telegram")),
@@ -642,12 +670,13 @@ async function iniciar() {
   const { data } = await sb.auth.getSession();
   const usuario = data.session?.user;
   if (!usuario) return mostrarLogin();
+  let admin;
   try {
-    const admin = await q(sb.from("administradores").select("usuario_id").maybeSingle());
+    admin = await q(sb.from("administradores").select("usuario_id, nome").maybeSingle());
     if (!admin) return semAcesso(usuario);
     catalogo = await q(sb.from("catalogo_comandos").select("*").order("comando"));
   } catch (e) { return mostrarLogin(e.message); }
-  estrutura(usuario);
+  estrutura(usuario, admin.nome);
   escutarMudancas();
   rota();
 }

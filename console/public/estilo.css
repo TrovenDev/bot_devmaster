@@ -1,4 +1,4 @@
-﻿/* Estrutura e componentes: Greta. Identidade de cores e imagens: Troven. */
+/* Estrutura e componentes: Greta. Identidade de cores e imagens: Troven. */
 @font-face { font-family: Geist; src: url('/fonts/geist-latin-wght-normal.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
 @font-face { font-family: 'Open Sans'; src: url('/fonts/open-sans-400.ttf') format('truetype'); font-weight: 400; font-display: swap; }
 @font-face { font-family: 'Open Sans'; src: url('/fonts/open-sans-600.ttf') format('truetype'); font-weight: 600; font-display: swap; }
@@ -22,14 +22,6 @@ a { color: var(--cobalto); }
 :focus-visible { outline: 2px solid var(--cobalto); outline-offset: 2px; }
 .sobre { color: var(--grafite); font: 400 11px/1.5 var(--fonte-ui); margin-bottom: 3px; }
 /* MenuHeader do Greta: faixa de 52px, itens retos e estado de selecao discreto. */
-.topo { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 16px; height: 52px; padding: 0 16px; background: var(--noite); color: white; }
-.topo img { display: block; height: 28px; }
-.topo nav { display: flex; align-self: stretch; flex: 1; gap: 0; }
-.topo nav a { display: flex; align-items: center; padding: 0 16px; color: #E0E0E0; text-decoration: none; font: 400 13px var(--fonte-ui); border-bottom: 2px solid transparent; transition: background .2s, color .2s; }
-.topo nav a:hover { background: rgb(198 244 50 / 12%); color: white; }
-.topo nav a.ativo { background: rgb(198 244 50 / 12%); border-bottom-color: var(--lima); color: white; }
-.topo button { background: transparent; color: #E0E0E0; box-shadow: none; }
-.topo button:hover { background: rgb(255 255 255 / 8%); color: white; }
 main { width: 100%; max-width: 1280px; margin: 0 auto; padding: 24px 32px 64px; }
 .cabeca { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
 .card { background: white; border: 1px solid var(--linha); border-radius: 5px; padding: 24px; margin-bottom: 20px; }
@@ -69,11 +61,6 @@ input[aria-invalid=true] { border-color: var(--erro); }
 .linha > * { flex: 1 1 160px; min-width: 0; }
 .linha > .fixo { flex: 0 0 auto; }
 .marcar { display: flex; align-items: center; gap: 8px; min-height: 27px; margin: 0; color: var(--noite); font-size: 13px; cursor: pointer; }
-input[type=checkbox] { appearance: none; flex: 0 0 16px; width: 16px; height: 16px; margin: 5px; border: 0; border-radius: 2px; background: #D3D3D3; display: inline-grid; place-content: center; cursor: pointer; box-shadow: 0 0 0 5px transparent; transition: background .2s, box-shadow .2s; }
-input[type=checkbox]:hover { box-shadow: 0 0 0 5px #0000000f; }
-input[type=checkbox]:checked { background: var(--cobalto); }
-input[type=checkbox]:checked::after { content: ''; width: 8px; height: 4px; border: solid white; border-width: 0 0 2px 2px; transform: rotate(-45deg) translateY(-1px); }
-input[type=checkbox]:disabled { opacity: .4; cursor: not-allowed; }
 /* Button: mesma geometria e estados das variantes do Greta. */
 button { height: 32px; padding: 0 12px; border: 1px solid transparent; border-radius: 4px; font: 400 13px var(--fonte-ui); cursor: pointer; transition: background .3s, box-shadow .3s, color .3s; }
 .btn { display: inline-flex; justify-content: center; align-items: center; gap: 6px; background: var(--cobalto); color: #ffffffe6; box-shadow: 0 1px 2px #00000033; }
@@ -136,10 +123,6 @@ body:has(.fundo) { overflow: hidden; }
 @keyframes abrir-sheet { from { transform: translateX(100%); } to { transform: translateX(0); } }
 @media (max-width: 767px) {
   input:not([type=checkbox]), select, textarea { font-size: 16px; }
-  .topo { height: auto; min-height: 52px; flex-wrap: wrap; gap: 8px; padding: 10px 16px 0; }
-  .topo nav { order: 3; flex-basis: 100%; overflow-x: auto; height: 40px; }
-  .topo nav a { padding-inline: 12px; white-space: nowrap; }
-  .topo .vivo { margin-left: auto; }
   main { padding: 20px 16px 48px; }
   .card { padding: 16px; } .campos { grid-template-columns: 1fr; }
   .tabela-rolagem table { min-width: 640px; }
@@ -149,6 +132,12 @@ body:has(.fundo) { overflow: hidden; }
 
 .sheet .janela-corpo { flex: 1; }
 .janela:focus { outline: none; }
+input[type=checkbox] { appearance: none; flex: 0 0 18px; width: 18px; height: 18px; margin: 0; border: 1.5px solid #B4B6C2; border-radius: 4px; background: white; display: inline-grid; place-content: center; cursor: pointer; box-shadow: none; transition: background .15s, border-color .15s, box-shadow .15s; }
+input[type=checkbox]:hover { border-color: var(--cobalto); box-shadow: 0 0 0 4px #2B35F01A; }
+input[type=checkbox]:checked, input[type=checkbox]:indeterminate { background: var(--cobalto); border-color: var(--cobalto); }
+input[type=checkbox]:checked::after { content: ''; width: 9px; height: 5px; border: solid white; border-width: 0 0 2px 2px; transform: rotate(-45deg) translate(1px, -1px); }
+input[type=checkbox]:indeterminate::after { content: ''; width: 8px; height: 2px; border: 0; background: white; transform: none; }
+input[type=checkbox]:disabled { opacity: .4; cursor: not-allowed; }
 /* Status da empresa: switch compacto com a cor de acao Troven. */
 input[type=checkbox].toggle { position: relative; flex: 0 0 32px; width: 32px; height: 18px; margin: 4px 0; border-radius: 999px; background: #b8b8b8; box-shadow: none; transition: background .2s; }
 input[type=checkbox].toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border: 0; border-radius: 50%; background: white; box-shadow: 0 1px 2px #00000026; transform: none; transition: transform .2s; }
@@ -203,3 +192,88 @@ input[type=checkbox].toggle:checked::after { transform: translateX(14px); }
 }
 .empresas-busca > .busca-icone { top: 10px; width: 11px; height: 11px; border: 1.5px solid currentColor; border-radius: 50%; }
 .busca-icone::after { content: ''; position: absolute; width: 5px; height: 1.5px; background: currentColor; right: -4px; bottom: -2px; transform: rotate(45deg); }
+
+/* ---- Shell: barra lateral com navegação e perfil do usuário */
+:root { --lateral: 232px; }
+.app { display: grid; grid-template-columns: var(--lateral) minmax(0, 1fr); min-height: 100dvh; }
+.lateral { position: sticky; top: 0; display: flex; flex-direction: column; height: 100dvh; padding: 16px 12px; background: var(--noite); color: white; }
+.lateral-marca { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 8px 24px; }
+.lateral-marca img { display: block; height: 26px; }
+.lateral nav { display: flex; flex: 1; flex-direction: column; gap: 2px; }
+.lateral nav a { display: flex; align-items: center; height: 36px; padding: 0 12px; border-left: 2px solid transparent; border-radius: 4px; color: #C9CADB; text-decoration: none; font: 400 13px var(--fonte-ui); transition: background .2s, color .2s; }
+.lateral nav a:hover { background: rgb(255 255 255 / 8%); color: white; }
+.lateral nav a.ativo { background: rgb(198 244 50 / 12%); border-left-color: var(--lima); color: white; }
+.lateral-status { padding: 0 8px 12px; }
+.perfil { display: flex; align-items: center; gap: 10px; padding: 14px 8px 0; border-top: 1px solid #2A2C47; }
+.avatar { display: grid; flex: 0 0 32px; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--lima); color: var(--noite); font: 600 12px var(--fonte-ui); }
+.perfil-dados { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.perfil-dados b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 12px var(--fonte-ui); }
+.perfil-dados span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--nevoa); font-size: 11px; }
+.perfil-sair { height: 28px; padding: 0 8px; background: transparent; color: #C9CADB; font-size: 12px; }
+.perfil-sair:hover { background: rgb(255 255 255 / 8%); color: white; }
+main { padding-bottom: 120px; }
+
+/* ---- Checkbox: caixa com borda, marca e estado indeterminado */
+input[type=checkbox].toggle { border: 0; }
+input[type=checkbox].toggle:hover { box-shadow: none; }
+.marcar { gap: 10px; }
+
+/* ---- Botão em forma de link */
+a.btn { height: 32px; padding: 0 12px; text-decoration: none; font: 400 13px var(--fonte-ui); }
+a.btn.sec { border-color: var(--linha); }
+.cabeca { align-items: flex-start; }
+
+/* ---- Barra fixa no rodapé (alterações não salvas e itens selecionados) */
+.barra-fixa, .empresas-selecao { position: fixed; left: var(--lateral); right: 0; bottom: 16px; z-index: 8; display: flex; align-items: center; justify-content: flex-start; gap: 12px; width: min(760px, calc(100% - var(--lateral) - 32px)); margin: 0 auto; padding: 12px 16px 12px 24px; border: 1px solid var(--linha); border-radius: 6px; background: white; box-shadow: 0 8px 24px #0F102033; animation: subir-barra .2s ease-out; }
+.barra-fixa[hidden], .empresas-selecao[hidden] { display: none; }
+.barra-fixa > span:first-child, .empresas-selecao > span:first-child { margin-right: auto; font: 600 13px var(--fonte-ui); }
+.barra-acoes { display: flex; gap: 8px; }
+@keyframes subir-barra { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+/* ---- Comandos do sistema: cabeçalho e linhas alinhadas em colunas */
+.comandos { overflow: hidden; border: 1px solid var(--linha); border-radius: 5px; }
+.comandos-cab, .comando-linha { display: grid; grid-template-columns: minmax(180px, 1.1fr) minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: center; padding: 0 16px; }
+.comandos-cab { height: 32px; border-bottom: 1px solid var(--linha); background: #f8f8f8; font: 600 10px var(--fonte-ui); text-transform: uppercase; }
+.comando-linha { padding-block: 12px; }
+.comando-linha + .comando-linha { border-top: 1px solid #f0f0f0; }
+.comando-nome { display: flex; flex-direction: column; line-height: 1.3; }
+.comando-nome b { font: 600 13px var(--fonte-ui); }
+.comando-nome small { color: var(--grafite); font: 400 11px ui-monospace, Consolas, monospace; }
+.nota { margin: 16px 0 0; }
+.risco { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.risco h2 { margin-bottom: 4px; }
+.risco p { margin: 0; }
+
+/* ---- Estado vazio */
+.estado-vazio { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 48px 24px; text-align: center; }
+.estado-vazio.compacto, .card .estado-vazio { padding: 24px 16px; }
+.estado-vazio-icone { position: relative; width: 44px; height: 44px; margin-bottom: 4px; border: 1px solid var(--linha); border-radius: 50%; background: var(--papel); }
+.estado-vazio-icone::before { content: ''; position: absolute; inset: 14px; border-radius: 3px; background: var(--cobalto); transform: rotate(45deg) scale(.8); }
+.estado-vazio-icone::after { content: ''; position: absolute; top: 8px; right: 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--lima); }
+.estado-vazio h3 { font: 600 14px var(--fonte-ui); }
+.estado-vazio p { max-width: 360px; margin: 0 0 8px; }
+
+/* ---- Diálogo de confirmação: compacto, sem faixa de cabeçalho */
+.janela.dialogo { max-width: 420px; }
+.dialogo .janela-corpo { padding: 28px 28px 8px; }
+.dialogo .janela-corpo h2 { margin-bottom: 8px; font-size: 16px; }
+.dialogo .janela-corpo p { margin: 0; color: var(--grafite); line-height: 1.6; }
+.dialogo .acoes { padding: 20px 28px 24px; border-top: 0; }
+
+@media (max-width: 767px) {
+  :root { --lateral: 0px; }
+  .app { display: block; }
+  .lateral { z-index: 5; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; height: auto; padding: 10px 16px 0; }
+  .lateral-marca { padding: 0; }
+  .lateral nav { flex: 0 0 100%; flex-direction: row; order: 3; height: 40px; overflow-x: auto; }
+  .lateral nav a { padding-inline: 12px; white-space: nowrap; border-left: 0; border-bottom: 2px solid transparent; border-radius: 0; }
+  .lateral nav a.ativo { border-bottom-color: var(--lima); }
+  .lateral-status { margin-left: auto; padding: 0; }
+  .perfil { padding: 0; border: 0; }
+  .perfil-dados { display: none; }
+  main { padding-bottom: 120px; }
+  .barra-fixa, .empresas-selecao { flex-wrap: wrap; gap: 8px; padding: 12px; }
+  .barra-fixa > span:first-child, .empresas-selecao > span:first-child { flex: 0 0 100%; }
+  .comandos-cab { display: none; }
+  .comando-linha { grid-template-columns: 1fr; gap: 10px; }
+}
