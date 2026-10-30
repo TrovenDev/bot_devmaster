@@ -21,7 +21,57 @@ function h(tag, attrs = {}, ...filhos) {
     else el.setAttribute(k, v === true ? "" : v);
   }
   for (const f of filhos.flat()) if (f !== null && f !== undefined && f !== false) el.append(f.nodeType ? f : String(f));
-  return el;
+  return tag === "select" ? seletor(el) : el;
+}
+
+// Select do Greta adaptado ao DOM do console, mantendo value/change.
+let sequenciaSelect = 0;
+function seletor(nativo) {
+  const id = nativo.id;
+  nativo.removeAttribute("id");
+  nativo.hidden = true;
+  const listaId = `select-opcoes-${++sequenciaSelect}`;
+  const rotulo = h("span", {}, nativo.selectedOptions[0]?.textContent || "Selecionar...");
+  const trigger = h("button", { type: "button", class: "select-trigger", id: id || undefined,
+    role: "combobox", "aria-haspopup": "listbox", "aria-controls": listaId, "aria-expanded": "false",
+    "aria-label": nativo.getAttribute("aria-label") || undefined, disabled: nativo.disabled }, rotulo);
+  const lista = h("div", { class: "select-opcoes", id: listaId, role: "listbox", hidden: true,
+    "aria-label": nativo.getAttribute("aria-label") || "Op\u00e7\u00f5es" });
+  const wrapper = h("div", { class: "select-ui" }, nativo, trigger, lista);
+  Object.defineProperty(wrapper, "value", { get: () => nativo.value, set: v => { nativo.value = v; atualizar(); } });
+  const fechar = () => { lista.hidden = true; trigger.setAttribute("aria-expanded", "false"); };
+  const atualizar = () => {
+    rotulo.textContent = nativo.selectedOptions[0]?.textContent || "Selecionar...";
+    lista.replaceChildren(...[...nativo.options].map(opcao => h("button", {
+      type: "button", class: "select-opcao", role: "option", tabindex: "-1", disabled: opcao.disabled,
+      "aria-selected": opcao.selected ? "true" : "false",
+      onclick: () => { nativo.value = opcao.value; atualizar(); fechar(); trigger.focus(); nativo.dispatchEvent(new Event("change", { bubbles: true })); }
+    }, opcao.textContent)));
+  };
+  const abrir = (ultimo = false) => {
+    atualizar(); lista.hidden = false; trigger.setAttribute("aria-expanded", "true");
+    const rect = trigger.getBoundingClientRect();
+    lista.classList.toggle("acima", window.innerHeight - rect.bottom < 220 && rect.top > 220);
+    const opcoes = [...lista.querySelectorAll("button:not(:disabled)")];
+    (ultimo ? opcoes.at(-1) : opcoes.find(b => b.getAttribute("aria-selected") === "true") || opcoes[0])?.focus();
+  };
+  trigger.addEventListener("click", () => lista.hidden ? abrir() : fechar());
+  wrapper.addEventListener("keydown", e => {
+    if (e.key === "Escape" && !lista.hidden) { e.preventDefault(); e.stopPropagation(); fechar(); trigger.focus(); }
+    else if (e.key === "Tab") fechar();
+    else if (["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) {
+      e.preventDefault();
+      if (lista.hidden) { abrir(e.key === "End"); return; }
+      const opcoes = [...lista.querySelectorAll("button:not(:disabled)")];
+      const index = opcoes.indexOf(document.activeElement);
+      const proximo = e.key === "Home" ? 0 : e.key === "End" ? opcoes.length - 1 : (index + (e.key === "ArrowDown" ? 1 : -1) + opcoes.length) % opcoes.length;
+      opcoes[proximo]?.focus();
+    }
+  });
+  wrapper.addEventListener("focusout", e => { if (!wrapper.contains(e.relatedTarget)) fechar(); });
+  nativo.addEventListener("change", atualizar);
+  atualizar();
+  return wrapper;
 }
 
 function traduzir(erro) {
@@ -79,12 +129,12 @@ function janela(titulo, corpo, acoes, sheet = false) {
   const painel = h("div", { class: sheet ? "janela sheet" : "janela", tabindex: "-1" });
   const fundo = h("div", { class: "fundo" + (sheet ? " fundo-sheet" : ""), role: "dialog", "aria-modal": "true", "aria-label": titulo }, painel);
   const fechar = () => { fundo.remove(); document.body.style.overflow = ""; anterior?.focus(); };
-  painel.append(h("div", { class: "sheet-topo" }, h("h2", {}, titulo), h("button", { class: "btn sec mini", "aria-label": "Fechar", onclick: fechar }, "?")), corpo, h("div", { class: "acoes" }, acoes(fechar)));
+  painel.append(h("div", { class: "sheet-topo" }, h("h2", {}, titulo), h("button", { class: "btn sec mini", "aria-label": "Fechar", onclick: fechar }, "\u00d7")), h("div", { class: "janela-corpo" }, corpo), h("div", { class: "acoes" }, acoes(fechar)));
   fundo.addEventListener("click", (e) => { if (e.target === fundo) fechar(); });
   fundo.addEventListener("keydown", (e) => {
     if (e.key === "Escape") fechar();
     if (e.key !== "Tab") return;
-    const itens = [...painel.querySelectorAll('button, input, select, textarea, a[href]')].filter(el => !el.disabled);
+    const itens = [...painel.querySelectorAll('button, input, select, textarea, a[href]')].filter(el => !el.disabled && !el.closest('[hidden]') && el.tabIndex >= 0);
     const primeiro = itens[0], ultimo = itens.at(-1);
     if (e.shiftKey && (document.activeElement === primeiro || document.activeElement === painel)) { e.preventDefault(); ultimo?.focus(); }
     else if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primeiro?.focus(); }
