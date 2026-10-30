@@ -74,8 +74,8 @@ class WhatsApp:
                     # até 3 opções: botões de resposta rápida
                     self._chamar("/message/sendButtons", {
                         "number": numero,
-                        "title": "",
-                        "description": assinar_whatsapp("Olá! O que você precisa?"),
+                        "title": "Bot | DevMaster",
+                        "description": "Olá! O que você precisa?",
                         "footer": "",
                         "buttons": [{"type": "reply", "displayText": c.titulo[:20], "id": c.nome} for c in cmds],
                     })
@@ -83,8 +83,8 @@ class WhatsApp:
                     # mais de 3: botão que abre uma lista para escolher
                     self._chamar("/message/sendList", {
                         "number": numero,
-                        "title": "",
-                        "description": assinar_whatsapp("Olá! O que você precisa?"),
+                        "title": "Bot | DevMaster",
+                        "description": "Olá! O que você precisa?",
                         "buttonText": "Ver opções",
                         "footerText": "",
                         "sections": [{
