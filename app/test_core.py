@@ -147,6 +147,28 @@ class TestWhatsApp(Base):
 
 
 class TestAtualizador(unittest.TestCase):
+    def test_atualizacao_pronta_aguarda_clique_e_nao_interrompe_tarefa(self):
+        with tempfile.TemporaryDirectory() as d:
+            a = atualizador.Atualizador(d, ocupado=lambda: True)
+            a.congelado = True
+            a._pronto = Path(d, "novo.exe")
+            self.assertFalse(a.pronta)
+            a._pronto.write_bytes(b"MZ")
+            self.assertTrue(a.pronta)
+            with mock.patch.object(atualizador.subprocess, "Popen") as iniciar:
+                self.assertFalse(a.aplicar())
+                iniciar.assert_not_called()
+
+    def test_verificacao_periodica_nao_instala_sem_clique(self):
+        a = atualizador.Atualizador(".")
+        a._parar = mock.Mock()
+        a._parar.is_set.side_effect = [False, True]
+        with mock.patch.object(a, "verificar", return_value=True) as verificar, \
+             mock.patch.object(a, "aplicar") as aplicar:
+            a.run()
+        verificar.assert_called_once()
+        aplicar.assert_not_called()
+
     def test_https_verifica_certificado_com_raizes_empacotadas(self):
         contexto = mock.Mock()
         with mock.patch.object(atualizador.ssl, "create_default_context", return_value=contexto), \

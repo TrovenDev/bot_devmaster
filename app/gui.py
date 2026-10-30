@@ -203,6 +203,10 @@ class Painel(tk.Tk):
         self.lb_atualizacao.grid(row=4, column=1, sticky="w")
         ttk.Button(f, text="Verificar atualização agora", style="Secundario.TButton",
                    command=self.verificar_agora).grid(row=5, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        self.bt_atualizar = ttk.Button(f, text="Atualizar agora", style="Primario.TButton",
+                                      command=self.atualizar_agora)
+        self.bt_atualizar.grid(row=5, column=1, sticky="w", pady=(8, 0))
+        self.bt_atualizar.grid_remove()
         self.lb_gestao = ttk.Label(f, text="Status: aguardando painel", style="Dica.TLabel", wraplength=700)
         self.lb_gestao.grid(row=6, column=0, columnspan=2, sticky="w", pady=(10, 0))
         return f
@@ -328,6 +332,22 @@ class Painel(tk.Tk):
     # ---------------- Atualização e início com o Windows ----------------
     def _mostrar_atualizacao(self):
         self.lb_atualizacao.config(text="Atualização: " + self.atualizador.status)
+
+        if self.atualizador.pronta:
+            self.bt_atualizar.grid()
+        else:
+            self.bt_atualizar.grid_remove()
+
+    def atualizar_agora(self):
+        if comandos.ocupado():
+            messagebox.showinfo("Atualizar", "Aguarde a tarefa atual terminar e clique em Atualizar agora novamente.")
+            return
+        try:
+            if not self.atualizador.aplicar():
+                messagebox.showinfo("Atualizar", "A atualizacao ainda nao esta pronta ou ha uma tarefa em andamento.")
+        except OSError as erro:
+            log.exception("Falha ao iniciar a atualizacao")
+            messagebox.showerror("Atualizar", str(erro))
 
     def verificar_agora(self):
         threading.Thread(target=self.atualizador.verificar, daemon=True).start()

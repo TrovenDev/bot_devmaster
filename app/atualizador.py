@@ -132,9 +132,13 @@ class Atualizador:
         parcial.replace(destino)
 
     # ---------------- Troca do executável ----------------
+    @property
+    def pronta(self) -> bool:
+        return bool(self._pronto and self._pronto.exists() and self.congelado)
+
     def aplicar(self) -> bool:
         """Troca o .exe pela versão baixada e reabre. Devolve False se não for possível."""
-        if not (self._pronto and self._pronto.exists() and self.congelado):
+        if not self.pronta or self._ocupado():
             return False
         alvo = Path(sys.executable)
         bat = self._pasta / "atualizar.bat"
@@ -175,12 +179,7 @@ start "" "%ALVO%" --minimizado
         """Bloqueia até parar(); chame em uma thread."""
         self._parar.wait(30)  # deixa o programa terminar de abrir
         while not self._parar.is_set():
-            if self.verificar() and self.congelado:
-                # instala assim que nenhum comando estiver rodando
-                while not self._parar.is_set():
-                    if not self._ocupado() and self.aplicar():
-                        return
-                    self._parar.wait(15)
+            self.verificar()
             self._parar.wait(INTERVALO)
 
     def parar(self):
