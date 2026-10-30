@@ -156,3 +156,50 @@ input[type=checkbox].toggle:checked { background: var(--cobalto); }
 input[type=checkbox].toggle:checked::after { transform: translateX(14px); }
 .toggle-label { gap: 10px; }
 #cnpj-status { margin: 6px 0 0; font-size: 11px; }
+/* Listagem de empresas: estrutura da pagina Clientes/DataTable do Greta. */
+.empresas-pagina { display: flex; flex-direction: column; gap: 16px; }
+.empresas-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.empresas-busca { position: relative; width: 280px; max-width: 100%; }
+.empresas-busca > span { position: absolute; left: 12px; top: 3px; color: var(--grafite); font: 22px/26px sans-serif; }
+.empresas-busca input { padding-left: 36px; border-radius: 5px; font-size: 12px; box-shadow: 0 1px 2px #00000033; }
+.empresas-lista { overflow: hidden; border: 1px solid var(--linha); border-radius: 5px; background: white; }
+.empresas-tabela { table-layout: fixed; }
+.empresas-tabela th { height: 32px; background: #f8f8f8; padding: 0 8px; border-top: 0; }
+.empresas-tabela th:nth-child(2) { width: 40%; }
+.empresas-tabela th:nth-child(3) { width: 27%; }
+.empresas-tabela th:nth-child(4) { width: 12%; }
+.empresas-tabela .col-selecao { width: 4%; min-width: 40px; text-align: center; }
+.empresas-tabela td { height: 52px; padding: 8px; border-bottom: 1px solid #f0f0f0; font: 400 12px var(--fonte-ui); color: var(--grafite); }
+.empresas-tabela td:nth-child(2), .empresas-tabela td:nth-child(3) { color: var(--noite); }
+.empresas-tabela tr.selecionada { background: var(--selecionado); }
+.empresas-tabela .ordenar { display: inline-flex; align-items: center; width: 100%; height: 31px; padding: 0; background: transparent; color: var(--noite); font-size: 10px; font-weight: 600; text-transform: uppercase; text-align: left; }
+.empresas-tabela .ordenar:hover { background: #00000008; }
+.empresa-nome { display: block; max-width: 100%; height: auto; min-height: 27px; padding: 0; background: transparent; color: var(--cobalto); text-align: left; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.empresa-nome:hover { text-decoration: underline; }
+.empresas-tabela .toggle-label { font-size: 11px; }
+.tabular { font-variant-numeric: tabular-nums; }
+.empresas-paginacao { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 24px 40px; background: #f4f4f4; border-top: 1px solid var(--linha); }
+.empresas-paginacao nav { display: flex; align-items: center; gap: 4px; }
+.empresas-paginacao button, .empresas-paginacao nav > span { display: grid; place-items: center; width: 27px; height: 27px; padding: 0; border-radius: 4px; background: transparent; color: var(--grafite); font-size: 11px; }
+.empresas-paginacao button.atual { background: white; color: var(--noite); font-weight: 600; box-shadow: 0 1px 2px #00000033; }
+.empresas-paginacao button:hover:not(:disabled) { background: white; color: var(--cobalto); }
+.empresas-vazio { padding: 48px 24px; text-align: center; }
+.empresas-selecao { position: sticky; bottom: 16px; display: flex; align-items: center; gap: 24px; padding: 16px 24px; border: 1px solid var(--linha); border-radius: 5px; background: white; box-shadow: 0 -2px 4px #0000000d; }
+.empresas-selecao[hidden] { display: none; }
+.acao-excluir { padding: 0 8px; background: transparent; color: var(--erro); }
+.acao-excluir:hover { background: #FDE8E8; }
+@media (max-width: 767px) {
+  .empresas-toolbar { align-items: stretch; } .empresas-busca { width: 100%; }
+  .empresas-tabela, .empresas-tabela tbody { display: block; }
+  .empresas-tabela thead { display: none; }
+  .empresas-tabela tbody { padding: 12px; }
+  .empresas-tabela tr { display: grid; grid-template-columns: 27px minmax(0,1fr); margin-bottom: 8px; padding: 12px; border: 1px solid var(--linha); border-radius: 8px; }
+  .empresas-tabela td { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: auto; min-height: 28px; padding: 2px 0; border: 0; grid-column: 2; }
+  .empresas-tabela .col-selecao { grid-column: 1; grid-row: 1 / 5; width: 27px; min-width: 0; align-items: start; }
+  .empresas-tabela td:nth-child(n+3)::before { content: attr(data-label); color: var(--grafite); font-size: 11px; }
+  .empresa-nome { font-size: 13px; font-weight: 600; white-space: normal; }
+  .empresas-paginacao { padding: 16px; flex-wrap: wrap; }
+  .empresas-selecao { gap: 8px; padding: 12px; flex-wrap: wrap; }
+}
+.empresas-busca > .busca-icone { top: 10px; width: 11px; height: 11px; border: 1.5px solid currentColor; border-radius: 50%; }
+.busca-icone::after { content: ''; position: absolute; width: 5px; height: 1.5px; background: currentColor; right: -4px; bottom: -2px; transform: rotate(45deg); }

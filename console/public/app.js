@@ -398,20 +398,67 @@ async function paginaEmpresas(c) {
           fechar(); aviso("Empresa salva");
         }) }, "Salvar")], true);
   };
-  const lista = h("div", { class: "card tabela-rolagem" });
-  c.replaceChildren(
-    h("div", { class: "cabeca" }, h("div", {}, h("div", { class: "sobre" }, "Clientes"), h("h1", {}, "Empresas")),
-      h("button", { class: "btn", onclick: () => editar() }, "+ Nova empresa")), lista);
+  let registros = [], pagina = 1, ordem = "nome", ascendente = true;
+  const selecionados = new Set();
+  const lista = h("div", { class: "empresas-lista" });
+  const busca = h("input", { type: "search", placeholder: "Pesquisar por nome ou CNPJ...", "aria-label": "Pesquisar empresas" });
+  const barraSelecao = h("div", { class: "empresas-selecao", hidden: true });
+  const normalizar = texto => String(texto || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const atualizar = () => {
+    const termo = normalizar(busca.value.trim());
+    const filtrados = registros.filter(e => normalizar(e.nome).includes(termo) || normalizar(e.documento).includes(termo) || (termo.replace(/\D/g, "") && String(e.documento || "").replace(/\D/g, "").includes(termo.replace(/\D/g, ""))));
+    const valor = e => ordem === "sistemas" ? e.sistemas?.[0]?.count || 0 : ordem === "ativa" ? Number(e.ativa) : e[ordem] || "";
+    filtrados.sort((a,b) => (typeof valor(a) === "number" ? valor(a) - valor(b) : String(valor(a)).localeCompare(String(valor(b)), "pt-BR")) * (ascendente ? 1 : -1));
+    const total = Math.max(1, Math.ceil(filtrados.length / 10));
+    pagina = Math.min(pagina, total);
+    const visiveis = filtrados.slice((pagina - 1) * 10, pagina * 10);
+    const selecionar = (id, marcada) => { marcada ? selecionados.add(id) : selecionados.delete(id); atualizar(); };
+    const todos = h("input", { type: "checkbox", "aria-label": "Selecionar todas as empresas desta p\u00e1gina", checked: visiveis.length > 0 && visiveis.every(e => selecionados.has(e.id)), onchange: ev => { visiveis.forEach(e => ev.target.checked ? selecionados.add(e.id) : selecionados.delete(e.id)); atualizar(); } });
+    todos.indeterminate = visiveis.some(e => selecionados.has(e.id)) && !visiveis.every(e => selecionados.has(e.id));
+    const cabecalho = (titulo, chave) => h("th", { scope: "col", "aria-sort": ordem === chave ? ascendente ? "ascending" : "descending" : "none" }, h("button", { class: "ordenar", onclick: () => { ascendente = ordem === chave ? !ascendente : true; ordem = chave; atualizar(); } }, titulo, ordem === chave ? ascendente ? " \u2191" : " \u2193" : ""));
+    const tabelaEmpresas = h("table", { class: "empresas-tabela" },
+      h("thead", {}, h("tr", {}, h("th", { class: "col-selecao" }, todos), cabecalho("Nome", "nome"), cabecalho("CNPJ", "documento"), cabecalho("Sistemas", "sistemas"), cabecalho("Status", "ativa"))),
+      h("tbody", {}, visiveis.map(e => {
+        const toggle = h("input", { type: "checkbox", role: "switch", class: "toggle", checked: !!e.ativa, "aria-label": `Empresa ${e.nome} ativa`, onchange: async () => {
+          toggle.disabled = true;
+          try { await q(sb.from("empresas").update({ ativa: toggle.checked }).eq("id", e.id)); e.ativa = toggle.checked; atualizar(); aviso("Status atualizado"); }
+          catch (erro) { toggle.checked = !!e.ativa; aviso(erro.message, true); }
+          finally { toggle.disabled = false; }
+        } });
+        return h("tr", { class: selecionados.has(e.id) ? "selecionada" : "" },
+          h("td", { class: "col-selecao" }, h("input", { type: "checkbox", checked: selecionados.has(e.id), "aria-label": `Selecionar ${e.nome}`, onchange: ev => selecionar(e.id, ev.target.checked) })),
+          h("td", { "data-label": "Nome" }, h("button", { class: "empresa-nome", onclick: () => editar(e), title: "Editar empresa" }, e.nome), e.observacao ? h("div", { class: "mudo" }, e.observacao) : null),
+          h("td", { "data-label": "CNPJ", class: "tabular" }, e.documento || "Sem cadastro"),
+          h("td", { "data-label": "Sistemas", class: "tabular" }, e.sistemas?.[0]?.count ?? 0),
+          h("td", { "data-label": "Status" }, h("label", { class: "marcar toggle-label" }, toggle, h("span", {}, e.ativa ? "Ativa" : "Inativa"))));
+      })));
+    const ir = numero => { pagina = numero; atualizar(); };
+    const paginas = [...new Set([1, pagina - 1, pagina, pagina + 1, total])].filter(n => n >= 1 && n <= total).sort((a,b) => a-b);
+    const botoesPaginas = [];
+    paginas.forEach((n,i) => {
+      if (i && n - paginas[i-1] > 1) botoesPaginas.push(h("span", {}, "\u2026"));
+      botoesPaginas.push(h("button", { class: n === pagina ? "atual" : "", "aria-label": `P\u00e1gina ${n}`, "aria-current": n === pagina ? "page" : undefined, onclick: () => ir(n) }, n));
+    });
+    const rodape = h("div", { class: "empresas-paginacao" },
+      h("nav", { "aria-label": "Pagina\u00e7\u00e3o de empresas" }, h("button", { "aria-label": "P\u00e1gina anterior", disabled: pagina === 1, onclick: () => ir(pagina-1) }, "\u2039"), botoesPaginas, h("button", { "aria-label": "Pr\u00f3xima p\u00e1gina", disabled: pagina === total, onclick: () => ir(pagina+1) }, "\u203a")),
+      h("span", { class: "mudo" }, `${filtrados.length} ${filtrados.length === 1 ? "empresa" : "empresas"}`));
+    lista.replaceChildren(filtrados.length ? h("div", { class: "empresas-scroll" }, tabelaEmpresas) : h("div", { class: "empresas-vazio" }, h("h2", {}, "Nenhuma empresa"), h("p", { class: "mudo" }, termo ? "Nenhum resultado para esta busca." : "Adicione a primeira empresa para come\u00e7ar.")), rodape);
+    barraSelecao.hidden = !selecionados.size;
+    barraSelecao.replaceChildren(h("span", {}, `${selecionados.size} ${selecionados.size === 1 ? "item selecionado" : "itens selecionados"}`),
+      h("button", { class: "btn sec", onclick: () => { selecionados.clear(); atualizar(); } }, "Limpar sele\u00e7\u00e3o"),
+      h("button", { class: "acao-excluir", onclick: () => {
+        const ids = [...selecionados];
+        confirmar("Excluir empresas", `Excluir ${ids.length} ${ids.length === 1 ? "empresa selecionada" : "empresas selecionadas"}?`, "Excluir", () => tentar(async () => { await q(sb.from("empresas").delete().in("id", ids)); ids.forEach(id => selecionados.delete(id)); await carregar(); aviso("Empresas exclu?das"); }));
+      } }, "Excluir"));
+  };
+  busca.addEventListener("input", () => { pagina = 1; atualizar(); });
+  c.replaceChildren(h("section", { class: "empresas-pagina", "aria-label": "Empresas" },
+    h("div", { class: "empresas-toolbar" }, h("button", { class: "btn", onclick: () => editar() }, "+ Adicionar"), h("div", { class: "empresas-busca" }, h("span", { "aria-hidden": "true", class: "busca-icone" }), busca)), lista, barraSelecao));
   const carregar = async () => {
-    const empresas = await q(sb.from("empresas").select("*, sistemas(count)").order("nome"));
-    lista.replaceChildren(empresas.length ? tabela(["Empresa", "Documento", "Sistemas", "Situação", ""],
-      empresas.map((e) => h("tr", {}, h("td", {}, h("b", {}, e.nome), e.observacao ? h("div", { class: "mudo" }, e.observacao) : null),
-        h("td", { class: "mono" }, e.documento || "—"), h("td", {}, e.sistemas?.[0]?.count ?? 0),
-        h("td", {}, h("span", { class: "selo " + (e.ativa ? "ok" : "erro") }, e.ativa ? "ativa" : "inativa")),
-        h("td", {}, h("div", { class: "linha" },
-          h("button", { class: "btn sec mini fixo", onclick: () => editar(e) }, "Editar"),
-          h("button", { class: "btn perigo mini fixo", onclick: () => confirmar("Excluir empresa", `Excluir “${e.nome}”?`, "Excluir", () => tentar(async () => { await q(sb.from("empresas").delete().eq("id", e.id)); aviso("Empresa excluída"); })) }, "Excluir"))))))
-      : h("div", { class: "vazio" }, "Nenhuma empresa cadastrada."));
+    registros = await q(sb.from("empresas").select("*, sistemas(count)").order("nome"));
+    const ids = new Set(registros.map(e => e.id));
+    selecionados.forEach(id => { if (!ids.has(id)) selecionados.delete(id); });
+    atualizar();
   };
   atualizadores = [carregar];
   await carregar();
