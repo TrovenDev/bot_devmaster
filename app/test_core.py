@@ -91,6 +91,19 @@ class TestComandos(Base):
 
 
 class TestDevMaster(unittest.TestCase):
+    def test_busca_atalho_ignora_o_bot_e_prefere_devmaster(self):
+        with tempfile.TemporaryDirectory() as d:
+            for nome in ("Bot DevMaster.lnk", "DevMasterBot.exe", "DevMaster Business.lnk", "DevMaster.lnk"):
+                Path(d, nome).touch()
+            with mock.patch.object(devmaster, "_pasta_windows", return_value=d), \
+                 mock.patch.dict(os.environ, {"DEVMASTER_ATALHO": str(Path(d, "Bot DevMaster.lnk"))}):
+                self.assertEqual(devmaster._achar_atalho(), str(Path(d, "DevMaster.lnk")))
+
+    def test_bot_e_instalador_nao_sao_atalhos_do_sistema(self):
+        for nome in ("Bot DevMaster.lnk", "DevMasterBot.exe", "BotDevMaster-Setup.exe"):
+            self.assertFalse(devmaster._atalho_do_sistema(nome))
+        self.assertTrue(devmaster._atalho_do_sistema("DevMaster Business.lnk"))
+
     def test_nome_do_arquivo_e_seguro(self):
         b = chr(92)
         self.assertEqual(devmaster._nome_seguro(""), "Estoque Geral.xlsx")
@@ -100,6 +113,17 @@ class TestDevMaster(unittest.TestCase):
 
 
 class TestWhatsApp(Base):
+    def test_assinatura_no_inicio_do_texto_e_legenda(self):
+        bot = whatsapp.WhatsApp("https://evolution", "instancia", "chave", "texto")
+        with mock.patch.object(bot, "_chamar") as chamar:
+            bot.enviar_texto("5511999998888", "Mensagem")
+            self.assertEqual(chamar.call_args.args[1]["text"], "*Bot | DevMaster:*\n\nMensagem")
+            with tempfile.TemporaryDirectory() as d:
+                arquivo = Path(d, "relatorio.xlsx")
+                arquivo.write_bytes(b"arquivo")
+                bot.enviar_arquivo("5511999998888", str(arquivo), "application/octet-stream", "Relatorio")
+            self.assertEqual(chamar.call_args.args[1]["caption"], "*Bot | DevMaster:*\n\nRelatorio")
+
     def test_texto_de_lista_e_botao(self):
         t = whatsapp.WhatsApp._texto
         self.assertEqual(t({"message": {"conversation": "estoque"}}), "estoque")

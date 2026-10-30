@@ -8,3 +8,9 @@ def assinar(texto: str, italico: bool = False) -> str:
     """Rodapé 'Bot DevMaster' em toda mensagem enviada (WhatsApp usa _itálico_)."""
     marca = f"_{NOME}_" if italico else f"— {NOME}"
     return f"{texto}\n\n{marca}" if texto else marca
+
+
+def assinar_whatsapp(texto: str) -> str:
+    """Cabecalho em negrito seguido da mensagem no WhatsApp."""
+    cabecalho = "*Bot | DevMaster:*"
+    return f"{cabecalho}\n\n{texto}" if texto else cabecalho

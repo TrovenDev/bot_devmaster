@@ -14,7 +14,7 @@ import urllib.request
 
 import comandos
 from configuracao import CONFIG, so_digitos
-from versao import NOME, assinar
+from versao import assinar_whatsapp
 
 log = logging.getLogger("whatsapp")
 
@@ -52,14 +52,14 @@ class WhatsApp:
             raise EvolutionErro(str(e))
 
     def enviar_texto(self, numero: str, texto: str):
-        self._chamar("/message/sendText", {"number": numero, "text": assinar(texto, italico=True)})
+        self._chamar("/message/sendText", {"number": numero, "text": assinar_whatsapp(texto)})
 
     def enviar_arquivo(self, numero: str, caminho: str, mimetype: str, legenda: str = ""):
         with open(caminho, "rb") as f:
             b64 = base64.b64encode(f.read()).decode("ascii")
         self._chamar("/message/sendMedia", {
             "number": numero, "mediatype": "document", "mimetype": mimetype,
-            "caption": assinar(legenda, italico=True), "fileName": os.path.basename(caminho), "media": b64})
+            "caption": assinar_whatsapp(legenda), "fileName": os.path.basename(caminho), "media": b64})
 
     def enviar_menu(self, numero: str):
         cmds = list(comandos.disponiveis().values())
@@ -74,19 +74,19 @@ class WhatsApp:
                     # até 3 opções: botões de resposta rápida
                     self._chamar("/message/sendButtons", {
                         "number": numero,
-                        "title": NOME,
-                        "description": "Olá! O que você precisa?",
-                        "footer": NOME,
+                        "title": "",
+                        "description": assinar_whatsapp("Olá! O que você precisa?"),
+                        "footer": "",
                         "buttons": [{"type": "reply", "displayText": c.titulo[:20], "id": c.nome} for c in cmds],
                     })
                 else:
                     # mais de 3: botão que abre uma lista para escolher
                     self._chamar("/message/sendList", {
                         "number": numero,
-                        "title": NOME,
-                        "description": "Olá! O que você precisa?",
+                        "title": "",
+                        "description": assinar_whatsapp("Olá! O que você precisa?"),
                         "buttonText": "Ver opções",
-                        "footerText": NOME,
+                        "footerText": "",
                         "sections": [{
                             "title": "Disponível",
                             "rows": [{"title": c.titulo[:24], "description": c.descricao[:72], "rowId": c.nome}

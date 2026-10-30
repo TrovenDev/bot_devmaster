@@ -104,20 +104,27 @@ def _no_menu_principal(pid):
         return False
 
 
+def _atalho_do_sistema(caminho):
+    nome = os.path.basename(caminho).casefold()
+    return (nome.endswith((".lnk", ".appref-ms", ".url", ".exe"))
+            and "devmaster" in nome
+            and not any(termo in nome for termo in ("bot", "setup", "instalador")))
+
+
 def _achar_atalho():
     """Atalho do DevMaster: o configurado ou um .lnk com 'devmaster' no nome na
     Área de Trabalho / Menu Iniciar."""
     manual = os.environ.get("DEVMASTER_ATALHO", "").strip().strip('"')
-    if manual:
+    if manual and _atalho_do_sistema(manual) and os.path.isfile(manual):
         return manual
+    if manual:
+        log.warning("Atalho configurado ignorado: nao corresponde ao sistema DevMaster.")
     pastas = [
         _pasta_windows(0x10),  # Área de Trabalho real do usuário (inclui OneDrive)
         _pasta_windows(0x19),  # Área de Trabalho pública
         os.path.join(os.path.expanduser("~"), "Desktop"),
         os.path.join(os.path.expanduser("~"), "OneDrive", "Desktop"),
         os.path.join(os.environ.get("PUBLIC", r"C:\Users\Public"), "Desktop"),
-        os.path.join(os.environ.get("APPDATA", ""), r"Microsoft\Windows\Start Menu\Programs"),
-        os.path.join(os.environ.get("ProgramData", ""), r"Microsoft\Windows\Start Menu\Programs"),
     ]
     extensoes = (".lnk", ".appref-ms", ".url", ".exe")  # .appref-ms = instalação ClickOnce
     olhadas = []
@@ -126,11 +133,11 @@ def _achar_atalho():
             continue
         olhadas.append(pasta)
         for raiz, _, arquivos in os.walk(pasta):
-            for nome in arquivos:
-                if nome.lower().endswith(extensoes) and "devmaster" in nome.lower():
+            for nome in sorted(arquivos, key=lambda n: (os.path.splitext(n)[0].casefold() != "devmaster", n.casefold())):
+                if _atalho_do_sistema(nome):
                     return os.path.join(raiz, nome)
     raise RuntimeError("Atalho do DevMaster não encontrado em: " + "; ".join(olhadas)
-                       + ". Informe o caminho no campo 'Atalho do DevMaster' do painel.")
+                       + ". Crie na area de trabalho um atalho chamado DevMaster para o sistema.")
 
 
 def _pasta_windows(csidl):
