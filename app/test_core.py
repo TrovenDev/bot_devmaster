@@ -147,6 +147,18 @@ class TestWhatsApp(Base):
 
 
 class TestAtualizador(unittest.TestCase):
+    def test_reinicio_extrai_python_em_nova_pasta_temporaria(self):
+        with tempfile.TemporaryDirectory() as d:
+            a = atualizador.Atualizador(d)
+            a.congelado = True
+            a._pronto = Path(d, "novo.exe")
+            a._pronto.write_bytes(b"MZ")
+            a._pasta.mkdir()
+            with mock.patch.object(atualizador.subprocess, "Popen") as iniciar:
+                self.assertTrue(a.aplicar())
+            self.assertEqual(iniciar.call_args.kwargs["env"]["PYINSTALLER_RESET_ENVIRONMENT"], "1")
+            self.assertIn('set "PYINSTALLER_RESET_ENVIRONMENT=1"', (a._pasta / "atualizar.bat").read_text())
+
     def test_atualizacao_pronta_aguarda_clique_e_nao_interrompe_tarefa(self):
         with tempfile.TemporaryDirectory() as d:
             a = atualizador.Atualizador(d, ocupado=lambda: True)

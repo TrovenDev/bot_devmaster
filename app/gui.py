@@ -201,11 +201,13 @@ class Painel(tk.Tk):
         ttk.Label(f, text=f"Versão {VERSION}", style="Card.TLabel").grid(row=4, column=0, sticky="w")
         self.lb_atualizacao = ttk.Label(f, text="Atualização: " + "ainda não verificada", style="Dica.TLabel")
         self.lb_atualizacao.grid(row=4, column=1, sticky="w")
-        ttk.Button(f, text="Verificar atualização agora", style="Secundario.TButton",
-                   command=self.verificar_agora).grid(row=5, column=0, columnspan=2, sticky="w", pady=(8, 0))
-        self.bt_atualizar = ttk.Button(f, text="Atualizar agora", style="Primario.TButton",
+        acoes_atualizacao = ttk.Frame(f, style="Card.TFrame")
+        acoes_atualizacao.grid(row=5, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        ttk.Button(acoes_atualizacao, text="Verificar atualizacao agora", style="Secundario.TButton",
+                   command=self.verificar_agora).grid(row=0, column=0, sticky="w", padx=(0, 12))
+        self.bt_atualizar = ttk.Button(acoes_atualizacao, text="Atualizar agora", style="Primario.TButton",
                                       command=self.atualizar_agora)
-        self.bt_atualizar.grid(row=5, column=1, sticky="w", pady=(8, 0))
+        self.bt_atualizar.grid(row=0, column=1, sticky="w")
         self.bt_atualizar.grid_remove()
         self.lb_gestao = ttk.Label(f, text="Status: aguardando painel", style="Dica.TLabel", wraplength=700)
         self.lb_gestao.grid(row=6, column=0, columnspan=2, sticky="w", pady=(10, 0))

@@ -145,7 +145,8 @@ class Atualizador:
         bat.write_text(self._script(self._pronto, alvo, os.getpid()), encoding="utf-8")
         flags = 0x08000000 | 0x00000200  # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP
         # sem console (programa em janela): o script precisa de handles nulos válidos
-        subprocess.Popen(["cmd", "/c", str(bat)], creationflags=flags, close_fds=True,
+        ambiente = {**os.environ, "PYINSTALLER_RESET_ENVIRONMENT": "1"}
+        subprocess.Popen(["cmd", "/c", str(bat)], env=ambiente, creationflags=flags, close_fds=True,
                          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         log.info("Atualização: reiniciando para instalar %s", self._pronto.name)
         self._ao_reiniciar()
@@ -169,6 +170,7 @@ if %n% geq 40 exit /b 1
 "%SystemRoot%\\System32\\timeout.exe" /t 1 /nobreak >nul
 goto copia
 :pronto
+set "PYINSTALLER_RESET_ENVIRONMENT=1"
 del "%NOVO%" >nul 2>nul
 start "" "%ALVO%" --minimizado
 (goto) 2>nul & del "%~f0"
