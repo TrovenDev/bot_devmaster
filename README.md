@@ -8,7 +8,7 @@ robô abre o DevMaster, faz o login, gera o arquivo e devolve o Excel no mesmo c
 ```
 WhatsApp / Telegram  →  Bot DevMaster (.exe no servidor Windows)  →  DevMaster (automação da tela)
                               ↕
-                  Console web (Cloudflare Worker + D1): empresas, sistemas, chaves, pessoas permitidas
+                  Console web (Cloudflare Pages + Supabase): empresas, sistemas, chaves, pessoas permitidas
 ```
 
 ## O que tem

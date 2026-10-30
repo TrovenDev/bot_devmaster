@@ -1,41 +1,84 @@
 # Console de gestão do Bot DevMaster
 
-Painel web (Cloudflare Worker + banco D1) para gerenciar **empresas**, **sistemas** (cada instalação do bot),
-**chaves**, os **arquivos/comandos** de cada sistema e **quem pode pedir** (números de WhatsApp e IDs do Telegram).
-Os programas instalados buscam a configuração aqui a cada 5 minutos e avisam que estão online.
+Painel web para gerenciar **empresas**, **sistemas** (cada instalação do bot), **chaves**, os **arquivos/comandos** de
+cada sistema e **quem pode pedir** (números de WhatsApp e IDs do Telegram). Roda no **Cloudflare Pages** e guarda
+os dados no **Supabase** (Postgres + Auth + Realtime). O painel atualiza ao vivo: sistemas online, execuções e contatos.
+
+```
+Navegador (painel estático)  ──supabase-js + Auth + Realtime──▶  Supabase (tabelas em português, RLS)
+Programa instalado (.exe)    ──/api/v1/*──▶ Pages Functions ──RPC bot_*──▶  Supabase
+```
+
+## 1. Banco (Supabase)
+
+O esquema está em [`../supabase/migrations/`](../supabase/migrations/). Tabelas: `empresas`, `sistemas`,
+`sistema_chaves`, `catalogo_comandos`, `sistema_comandos`, `contatos`, `execucoes`, `administradores`.
+
+```bash
+npx supabase login
+npx supabase db query --linked --project-ref SEU_REF -f supabase/migrations/20261030170000_estrutura_inicial.sql
+```
+
+Ou cole o arquivo no **SQL Editor** do projeto. Pode rodar mais de uma vez.
+
+**Primeiro administrador** (o painel só abre para quem está em `administradores`):
+
+1. Supabase › **Authentication › Users › Add user** (e-mail e senha; marque *Auto Confirm*).
+2. Entre no painel com esse usuário. Ele mostra o SQL pronto, com o seu `id`. Rode no SQL Editor:
+   ```sql
+   insert into public.administradores (usuario_id, nome) values ('SEU-ID-AQUI', 'Seu nome');
+   ```
+3. Em **Authentication › Providers › Email**, desligue *Allow new users to sign up*: só você cria usuários.
+
+## 2. Publicar no Cloudflare Pages
+
+**Pelo painel da Cloudflare (recomendado, publica a cada `git push`):**
+
+1. **Workers & Pages › Create › Pages › Connect to Git** e escolha `TrovenDev/bot_devmaster`.
+2. Configure:
+   - **Production branch:** `main`
+   - **Root directory:** `console`
+   - **Build command:** *(vazio)*
+   - **Build output directory:** `public`
+3. **Settings › Variables and Secrets** (Production e Preview), em *Plaintext*:
+   - `SUPABASE_URL` = `https://SEU_REF.supabase.co`
+   - `SUPABASE_PUBLISHABLE_KEY` = a chave `sb_publishable_…` (Supabase › Project Settings › API Keys)
+4. **Deployments › Retry deployment** para aplicar as variáveis.
+5. **Custom domains** para usar um endereço seu (ex.: `bots.seudominio.com.br`).
+
+**Ou pela linha de comando:**
+
+```bash
+cd console
+npm install
+npx wrangler pages project create bot-devmaster-console --production-branch main
+npx wrangler pages deploy public --project-name bot-devmaster-console
+```
+e depois defina as duas variáveis no painel (passo 3).
+
+Nunca coloque a chave `sb_secret_…` (nem a `service_role`) no Pages: o painel e a API só usam a chave pública, e a
+segurança vem das políticas RLS do banco.
+
+## 3. Ligar o programa
+
+No programa (aba **Gestão**): **Endereço do servidor** = a URL do Pages e **Chave deste sistema** = a chave mostrada
+uma única vez ao criar o sistema no painel.
 
 ## Rodar local
 
 ```bash
 npm install
-printf 'ADMIN_PASSWORD=troque-esta-senha\nSESSION_SECRET=um-texto-longo-e-aleatorio\n' > .dev.vars
-npm run migrar:local
-npm run dev            # http://127.0.0.1:8787
-npm test               # com o dev rodando (ajuste CONSOLE_URL e ADMIN_PASSWORD se mudou)
+printf 'SUPABASE_URL=https://SEU_REF.supabase.co\nSUPABASE_PUBLISHABLE_KEY=sb_publishable_...\n' > .dev.vars
+npm run dev          # http://127.0.0.1:8788
+npm test             # testes da API do programa (Supabase simulado)
 ```
 
-## Publicar na Cloudflare
+`npm run vendorizar` atualiza `public/vendor/supabase.js` (o painel não usa CDN: a CSP só aceita `'self'`).
 
-```bash
-npx wrangler login
-npx wrangler d1 create bot-devmaster            # cole o database_id em wrangler.jsonc ("database_id": "...")
-npm run migrar                                  # cria as tabelas no banco remoto
-npx wrangler secret put ADMIN_PASSWORD          # senha do painel
-npx wrangler secret put SESSION_SECRET          # texto aleatório longo (assina o cookie de sessão)
-npm run deploy
-```
+## Segurança
 
-Depois, em **Workers › bot-devmaster-console › Settings › Domains**, adicione o domínio que preferir
-(ex.: `bots.seudominio.com.br`). Use sempre HTTPS: o cookie de sessão é `Secure`.
-
-## Como funciona
-
-| Quem | Rota | Autenticação |
-|------|------|--------------|
-| Você (painel) | `/api/*` | senha → cookie de sessão assinado (12 h), 5 tentativas/10 min |
-| Programa instalado | `/api/v1/config`, `/heartbeat`, `/execucoes` | `Authorization: Bearer dmb_…` (chave do sistema) |
-
-- A chave é mostrada **uma vez** (ao criar ou gerar outra) e só o hash SHA-256 fica no banco.
-- Desativar um sistema (ou a empresa) esvazia comandos e contatos na próxima consulta; excluir ou trocar a chave
-  bloqueia o programa na hora.
-- O programa guarda a última configuração em cache e continua funcionando se o console ficar fora do ar.
+- RLS ligado em todas as tabelas; sem login nada é lido. O hash das chaves fica em `sistema_chaves`, sem nenhum acesso
+  pela API (só as funções `bot_*`, que recebem a chave).
+- Chaves de 244 bits, mostradas uma vez; gerar outra invalida a anterior. Desativar o sistema ou a empresa esvazia
+  comandos e contatos na próxima consulta; excluir o sistema bloqueia o programa na hora.
+- O histórico de execuções é apagado depois de 90 dias (pg_cron).

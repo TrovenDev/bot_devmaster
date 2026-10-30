@@ -1,8 +1,13 @@
-// Painel de gestão do Bot DevMaster. Sem framework: o DOM é montado com h() (textContent), nunca com innerHTML.
+// Painel de gestão do Bot DevMaster (Supabase: Auth + Postgres com RLS + Realtime).
+// Sem framework: o DOM é montado com h() (textContent), nunca com innerHTML.
 "use strict";
 
 const raiz = document.getElementById("raiz");
-let catalogo = {};
+const ONLINE_MS = 10 * 60 * 1000;
+let sb = null;
+let catalogo = [];
+let canalRealtime = null;
+let aoVivo = () => {};
 
 // ---------------- Utilitários ----------------
 function h(tag, attrs = {}, ...filhos) {
@@ -19,17 +24,29 @@ function h(tag, attrs = {}, ...filhos) {
   return el;
 }
 
-async function api(metodo, caminho, corpo) {
-  const r = await fetch(`/api${caminho}`, {
-    method: metodo,
-    headers: corpo ? { "Content-Type": "application/json" } : {},
-    body: corpo ? JSON.stringify(corpo) : undefined,
-    credentials: "same-origin",
-  });
-  const dados = await r.json().catch(() => ({}));
-  if (r.status === 401 && caminho !== "/login") { mostrarLogin(); throw new Error("Sessão expirada"); }
-  if (!r.ok) throw new Error(dados.erro || `Erro ${r.status}`);
-  return dados;
+function traduzir(erro) {
+  const c = erro.code || "";
+  const m = erro.message || String(erro);
+  if (c === "23503") return "Este registro está em uso por outros dados. Remova ou mude o que depende dele antes.";
+  if (c === "23505") return "Já está cadastrado.";
+  if (c === "23514") return "Valor inválido. Confira os campos (número com DDI+DDD, ID só com números, arquivo sem pasta).";
+  if (c === "23502") return "Preencha os campos obrigatórios.";
+  if (c === "42501" || /permission denied|row-level security/i.test(m)) return "Sem permissão para esta operação.";
+  if (/JWT expired|invalid JWT/i.test(m)) return "Sessão expirada. Entre de novo.";
+  if (/Failed to fetch|NetworkError/i.test(m)) return "Sem conexão com o servidor.";
+  return m;
+}
+
+/** Executa uma consulta do supabase-js e devolve os dados (ou lança erro em português). */
+async function q(consulta) {
+  const { data, error } = await consulta;
+  if (error) {
+    const e = new Error(traduzir(error));
+    e.original = error;
+    if (/JWT expired|invalid JWT/i.test(error.message || "")) { await sb.auth.signOut(); mostrarLogin(); }
+    throw e;
+  }
+  return data;
 }
 
 let tempoToast;
@@ -47,13 +64,15 @@ async function tentar(fn) {
 
 function quando(iso) {
   if (!iso) return "nunca";
-  const d = new Date(iso.replace(" ", "T") + "Z");
+  const d = new Date(iso);
   const seg = (Date.now() - d.getTime()) / 1000;
   if (seg < 60) return "agora há pouco";
   if (seg < 3600) return `há ${Math.floor(seg / 60)} min`;
   if (seg < 86400) return `há ${Math.floor(seg / 3600)} h`;
   return d.toLocaleDateString("pt-BR") + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 }
+
+const estaOnline = (s) => !!s.ultimo_contato && Date.now() - new Date(s.ultimo_contato).getTime() < ONLINE_MS;
 
 function janela(titulo, corpo, acoes) {
   const fundo = h("div", { class: "fundo", role: "dialog", "aria-modal": "true", "aria-label": titulo },
@@ -71,11 +90,10 @@ function confirmar(titulo, mensagem, rotulo, aoConfirmar) {
 }
 
 function mostrarChave(chave, titulo = "Chave do sistema") {
-  const code = h("code", {}, chave);
   janela(titulo,
     h("div", {},
-      h("p", {}, "Copie e guarde agora: por segurança, esta chave não será mostrada de novo. Cole no campo “Chave deste sistema” do programa."),
-      h("div", { class: "chave" }, code)),
+      h("p", {}, "Copie e guarde agora: por segurança, esta chave não será mostrada de novo. Cole no campo “Chave deste sistema” do programa, junto com o endereço deste painel."),
+      h("div", { class: "chave" }, h("code", {}, chave))),
     (fechar) => [
       h("button", { class: "btn sec", onclick: async () => { await navigator.clipboard.writeText(chave).catch(() => {}); aviso("Chave copiada"); } }, "Copiar"),
       h("button", { class: "btn", onclick: fechar }, "Já guardei"),
@@ -83,7 +101,16 @@ function mostrarChave(chave, titulo = "Chave do sistema") {
 }
 
 // ---------------- Login e estrutura ----------------
-function mostrarLogin() {
+function semConfiguracao() {
+  raiz.replaceChildren(h("div", { class: "login" }, h("div", { class: "card aviso-vazio" },
+    h("h2", {}, "Painel sem configuração"),
+    h("p", {}, "Defina as variáveis do projeto no Cloudflare Pages:"),
+    h("pre", {}, "SUPABASE_URL\nSUPABASE_PUBLISHABLE_KEY"),
+    h("p", { class: "mudo" }, "Settings › Variables and Secrets. Depois faça um novo deploy."))));
+}
+
+function mostrarLogin(mensagem = "") {
+  if (canalRealtime) { sb.removeChannel(canalRealtime); canalRealtime = null; }
   raiz.replaceChildren(
     h("div", { class: "login" },
       h("form", {
@@ -91,28 +118,42 @@ function mostrarLogin() {
           e.preventDefault();
           const msg = e.target.querySelector(".msg");
           msg.textContent = "";
-          try {
-            await api("POST", "/login", { senha: e.target.senha.value });
-            iniciar();
-          } catch (err) { msg.textContent = err.message; }
+          const { error } = await sb.auth.signInWithPassword({ email: e.target.email.value.trim(), password: e.target.senha.value });
+          if (error) { msg.textContent = /invalid login/i.test(error.message) ? "E-mail ou senha incorretos." : traduzir(error); return; }
+          iniciar();
         },
       },
         h("img", { src: "/troven-horizontal-negativo.svg", alt: "Troven" }),
         h("h1", {}, "Gestão do Bot DevMaster"),
         h("p", {}, "Entre para gerenciar empresas, sistemas e chaves."),
+        h("label", { for: "email" }, "E-mail"),
+        h("input", { id: "email", name: "email", type: "email", autocomplete: "username", required: true, autofocus: true }),
         h("label", { for: "senha" }, "Senha"),
-        h("input", { id: "senha", name: "senha", type: "password", autocomplete: "current-password", required: true, autofocus: true }),
+        h("input", { id: "senha", name: "senha", type: "password", autocomplete: "current-password", required: true }),
         h("button", { class: "btn", type: "submit" }, "Entrar"),
-        h("div", { class: "msg", role: "alert" }))));
+        h("div", { class: "msg", role: "alert" }, mensagem))));
 }
 
-function estrutura() {
+function semAcesso(usuario) {
+  raiz.replaceChildren(h("div", { class: "login" }, h("div", { class: "card aviso-vazio" },
+    h("h2", {}, "Seu usuário ainda não é administrador"),
+    h("p", {}, "O login funcionou, mas falta liberar o acesso. No Supabase, abra o SQL Editor e rode:"),
+    h("pre", {}, `insert into public.administradores (usuario_id, nome)\nvalues ('${usuario.id}', 'Seu nome');`),
+    h("div", { class: "linha" },
+      h("button", { class: "btn", onclick: () => iniciar() }, "Já liberei, entrar"),
+      h("button", { class: "btn sec", onclick: async () => { await sb.auth.signOut(); mostrarLogin(); } }, "Sair")))));
+}
+
+function estrutura(usuario) {
   const link = (href, texto) => h("a", { href, "data-rota": href }, texto);
+  const vivo = h("span", { class: "vivo", title: "Atualização em tempo real" }, "ao vivo");
+  aoVivo = (ligado) => vivo.classList.toggle("ligado", ligado);
   raiz.replaceChildren(
     h("header", { class: "topo" },
       h("img", { src: "/troven-horizontal-negativo.svg", alt: "Troven" }),
       h("nav", {}, link("#/", "Sistemas"), link("#/empresas", "Empresas"), link("#/execucoes", "Execuções")),
-      h("button", { onclick: async () => { await api("POST", "/logout").catch(() => {}); mostrarLogin(); } }, "Sair")),
+      vivo,
+      h("button", { title: usuario.email, onclick: async () => { await sb.auth.signOut(); mostrarLogin(); } }, "Sair")),
     h("main", { id: "conteudo" }));
 }
 
@@ -124,145 +165,203 @@ function marcarMenu() {
   }
 }
 
-// ---------------- Páginas ----------------
-async function paginaSistemas(c) {
-  const [resumo, sistemas] = await Promise.all([api("GET", "/resumo"), api("GET", "/sistemas")]);
-  c.replaceChildren(
-    h("div", { class: "cabeca" }, h("div", {}, h("div", { class: "sobre" }, "Visão geral"), h("h1", {}, "Sistemas")),
-      h("button", { class: "btn", onclick: () => (location.hash = "#/sistema/novo") }, "+ Novo sistema")),
-    h("div", { class: "grade" },
-      numero(`${resumo.online}/${resumo.sistemas}`, "sistemas online"),
-      numero(resumo.empresas, "empresas"),
-      numero(resumo.execucoes_24h, "execuções em 24 h"),
-      numero(resumo.falhas_24h, "falhas em 24 h", resumo.falhas_24h > 0)),
-    h("div", { class: "card tabela-rolagem" }, sistemas.length ? tabela(
-      ["Sistema", "Empresa", "Situação", "Versão", "Último contato"],
-      sistemas.map((s) => h("tr", { class: "clicavel", tabindex: "0", onclick: () => (location.hash = `#/sistema/${s.id}`),
-        onkeydown: (e) => { if (e.key === "Enter") location.hash = `#/sistema/${s.id}`; } },
-        h("td", {}, h("b", {}, s.nome)), h("td", {}, s.empresa_nome),
-        h("td", {}, !s.ativo ? h("span", { class: "selo erro" }, "desativado") : s.online ? h("span", { class: "selo online" }, "online") : h("span", { class: "selo offline" }, "offline")),
-        h("td", { class: "mono" }, s.versao || "—"), h("td", { class: "mudo" }, quando(s.ultimo_contato))))) : h("div", { class: "vazio" }, "Nenhum sistema ainda. Cadastre uma empresa e crie o primeiro sistema.")));
+// ---------------- Realtime ----------------
+let atualizadores = []; // funções da página atual chamadas quando algo muda no banco
+let tempoRefresh;
+
+function escutarMudancas() {
+  if (canalRealtime) sb.removeChannel(canalRealtime);
+  const aoMudar = () => {
+    clearTimeout(tempoRefresh);
+    tempoRefresh = setTimeout(() => atualizadores.forEach((f) => f().catch(() => {})), 400);
+  };
+  canalRealtime = sb.channel("painel");
+  for (const tabela of ["empresas", "sistemas", "sistema_comandos", "contatos", "execucoes"]) {
+    canalRealtime.on("postgres_changes", { event: "*", schema: "public", table: tabela }, aoMudar);
+  }
+  canalRealtime.subscribe((estado) => aoVivo(estado === "SUBSCRIBED"));
 }
 
+// o "online" depende do relógio: reavalia a cada minuto sem precisar de evento no banco
+setInterval(() => atualizadores.forEach((f) => f().catch(() => {})), 60_000);
+
+// ---------------- Páginas ----------------
 const numero = (valor, rotulo, alerta = false) => h("div", { class: "numero" + (alerta ? " alerta" : "") }, h("b", {}, valor), h("span", {}, rotulo));
 const tabela = (cabecas, linhas) => h("table", {}, h("thead", {}, h("tr", {}, cabecas.map((t) => h("th", {}, t)))), h("tbody", {}, linhas));
+const seloSistema = (s) => (!s.ativo ? h("span", { class: "selo erro" }, "desativado") : estaOnline(s) ? h("span", { class: "selo online" }, "online") : h("span", { class: "selo offline" }, "offline"));
+
+async function paginaSistemas(c) {
+  const cabeca = h("div", { class: "cabeca" }, h("div", {}, h("div", { class: "sobre" }, "Visão geral"), h("h1", {}, "Sistemas")),
+    h("button", { class: "btn", onclick: () => (location.hash = "#/sistema/novo") }, "+ Novo sistema"));
+  const numeros = h("div", { class: "grade" });
+  const lista = h("div", { class: "card tabela-rolagem" });
+  c.replaceChildren(cabeca, numeros, lista);
+
+  const carregar = async () => {
+    const [resumo, sistemas] = await Promise.all([q(sb.rpc("painel_resumo")), q(sb.from("sistemas").select("*, empresas(nome)").order("nome"))]);
+    numeros.replaceChildren(
+      numero(`${resumo.online}/${resumo.sistemas}`, "sistemas online"), numero(resumo.empresas, "empresas"),
+      numero(resumo.execucoes_24h, "execuções em 24 h"), numero(resumo.falhas_24h, "falhas em 24 h", resumo.falhas_24h > 0));
+    lista.replaceChildren(sistemas.length ? tabela(["Sistema", "Empresa", "Situação", "Versão", "Último contato"],
+      sistemas.map((s) => h("tr", { class: "clicavel", tabindex: "0", onclick: () => (location.hash = `#/sistema/${s.id}`),
+        onkeydown: (e) => { if (e.key === "Enter") location.hash = `#/sistema/${s.id}`; } },
+        h("td", {}, h("b", {}, s.nome)), h("td", {}, s.empresas?.nome), h("td", {}, seloSistema(s)),
+        h("td", { class: "mono" }, s.versao || "—"), h("td", { class: "mudo" }, quando(s.ultimo_contato)))))
+      : h("div", { class: "vazio" }, "Nenhum sistema ainda. Cadastre uma empresa e crie o primeiro sistema."));
+  };
+  atualizadores = [carregar];
+  await carregar();
+}
 
 async function paginaEmpresas(c) {
-  const empresas = await api("GET", "/empresas");
   const editar = (e = {}) => {
     const nome = h("input", { type: "text", id: "en", value: e.nome || "", maxlength: 120 });
     const doc = h("input", { type: "text", id: "ed", value: e.documento || "", maxlength: 30 });
     const obs = h("input", { type: "text", id: "eo", value: e.observacao || "", maxlength: 500 });
-    const ativo = h("input", { type: "checkbox", checked: e.id ? !!e.ativo : true });
+    const ativa = h("input", { type: "checkbox", checked: e.id ? !!e.ativa : true });
     janela(e.id ? "Editar empresa" : "Nova empresa",
       h("div", { class: "campos" }, h("div", {}, h("label", { for: "en" }, "Nome"), nome), h("div", {}, h("label", { for: "ed" }, "CNPJ / documento"), doc),
-        h("div", {}, h("label", { for: "eo" }, "Observação"), obs), h("label", { class: "marcar" }, ativo, "Empresa ativa")),
+        h("div", {}, h("label", { for: "eo" }, "Observação"), obs), h("label", { class: "marcar" }, ativa, "Empresa ativa")),
       (fechar) => [h("button", { class: "btn sec", onclick: fechar }, "Cancelar"),
         h("button", { class: "btn", onclick: () => tentar(async () => {
-          const corpo = { nome: nome.value, documento: doc.value, observacao: obs.value, ativo: ativo.checked };
-          if (e.id) await api("PUT", `/empresas/${e.id}`, corpo); else await api("POST", "/empresas", corpo);
-          fechar(); aviso("Empresa salva"); rota();
+          const corpo = { nome: nome.value.trim(), documento: doc.value.trim(), observacao: obs.value.trim(), ativa: ativa.checked };
+          await q(e.id ? sb.from("empresas").update(corpo).eq("id", e.id) : sb.from("empresas").insert(corpo));
+          fechar(); aviso("Empresa salva");
         }) }, "Salvar")]);
   };
+  const lista = h("div", { class: "card tabela-rolagem" });
   c.replaceChildren(
     h("div", { class: "cabeca" }, h("div", {}, h("div", { class: "sobre" }, "Clientes"), h("h1", {}, "Empresas")),
-      h("button", { class: "btn", onclick: () => editar() }, "+ Nova empresa")),
-    h("div", { class: "card tabela-rolagem" }, empresas.length ? tabela(["Empresa", "Documento", "Sistemas", "Situação", ""],
+      h("button", { class: "btn", onclick: () => editar() }, "+ Nova empresa")), lista);
+  const carregar = async () => {
+    const empresas = await q(sb.from("empresas").select("*, sistemas(count)").order("nome"));
+    lista.replaceChildren(empresas.length ? tabela(["Empresa", "Documento", "Sistemas", "Situação", ""],
       empresas.map((e) => h("tr", {}, h("td", {}, h("b", {}, e.nome), e.observacao ? h("div", { class: "mudo" }, e.observacao) : null),
-        h("td", { class: "mono" }, e.documento || "—"), h("td", {}, e.sistemas),
-        h("td", {}, h("span", { class: "selo " + (e.ativo ? "ok" : "erro") }, e.ativo ? "ativa" : "inativa")),
+        h("td", { class: "mono" }, e.documento || "—"), h("td", {}, e.sistemas?.[0]?.count ?? 0),
+        h("td", {}, h("span", { class: "selo " + (e.ativa ? "ok" : "erro") }, e.ativa ? "ativa" : "inativa")),
         h("td", {}, h("div", { class: "linha" },
           h("button", { class: "btn sec mini fixo", onclick: () => editar(e) }, "Editar"),
-          h("button", { class: "btn perigo mini fixo", onclick: () => confirmar("Excluir empresa", `Excluir “${e.nome}”?`, "Excluir", () => tentar(async () => { await api("DELETE", `/empresas/${e.id}`); aviso("Empresa excluída"); rota(); })) }, "Excluir")))))) : h("div", { class: "vazio" }, "Nenhuma empresa cadastrada.")));
-}
-
-async function paginaExecucoes(c) {
-  const lista = await api("GET", "/execucoes?limite=200");
-  c.replaceChildren(
-    h("div", { class: "cabeca" }, h("div", {}, h("div", { class: "sobre" }, "Histórico"), h("h1", {}, "Execuções"))),
-    h("div", { class: "card tabela-rolagem" }, lista.length ? tabelaExecucoes(lista, true) : h("div", { class: "vazio" }, "Nenhuma execução registrada ainda.")));
+          h("button", { class: "btn perigo mini fixo", onclick: () => confirmar("Excluir empresa", `Excluir “${e.nome}”?`, "Excluir", () => tentar(async () => { await q(sb.from("empresas").delete().eq("id", e.id)); aviso("Empresa excluída"); })) }, "Excluir"))))))
+      : h("div", { class: "vazio" }, "Nenhuma empresa cadastrada."));
+  };
+  atualizadores = [carregar];
+  await carregar();
 }
 
 function tabelaExecucoes(lista, comSistema) {
   return tabela([comSistema ? "Sistema" : null, "Quando", "Comando", "Canal", "Solicitante", "Resultado", "Duração"].filter(Boolean),
-    lista.map((x) => h("tr", {}, comSistema ? h("td", {}, x.sistema_nome) : null, h("td", { class: "mudo" }, quando(x.criado_em)), h("td", {}, x.comando),
+    lista.map((x) => h("tr", {}, comSistema ? h("td", {}, x.sistemas?.nome) : null, h("td", { class: "mudo" }, quando(x.criada_em)), h("td", {}, x.comando),
       h("td", {}, x.canal || "—"), h("td", { class: "mono" }, x.solicitante || "—"),
-      h("td", {}, x.ok ? h("span", { class: "selo ok" }, "ok") : h("span", { class: "selo erro", title: x.erro }, "falhou")),
+      h("td", {}, x.sucesso ? h("span", { class: "selo ok" }, "ok") : h("span", { class: "selo erro", title: x.erro }, "falhou")),
       h("td", { class: "mudo" }, x.duracao_ms ? `${(x.duracao_ms / 1000).toFixed(0)} s` : "—"))));
+}
+
+async function paginaExecucoes(c) {
+  const lista = h("div", { class: "card tabela-rolagem" });
+  c.replaceChildren(h("div", { class: "cabeca" }, h("div", {}, h("div", { class: "sobre" }, "Histórico"), h("h1", {}, "Execuções"))), lista);
+  const carregar = async () => {
+    const dados = await q(sb.from("execucoes").select("*, sistemas(nome)").order("id", { ascending: false }).limit(200));
+    lista.replaceChildren(dados.length ? tabelaExecucoes(dados, true) : h("div", { class: "vazio" }, "Nenhuma execução registrada ainda."));
+  };
+  atualizadores = [carregar];
+  await carregar();
 }
 
 async function paginaSistema(c, idTexto) {
   const novo = idTexto === "novo";
-  const empresas = await api("GET", "/empresas");
-  const det = novo ? null : await api("GET", `/sistemas/${idTexto}`);
-  const s = det ? det.sistema : { nome: "", empresa_id: empresas[0]?.id, ativo: 1, devmaster_empresa: "Loja/Gerencial", devmaster_modulo: "Gestão Varejo Atacado" };
+  const empresas = await q(sb.from("empresas").select("id, nome").order("nome"));
   if (!empresas.length) {
     c.replaceChildren(h("div", { class: "card" }, h("h2", {}, "Cadastre uma empresa primeiro"), h("p", {}, "Todo sistema pertence a uma empresa."), h("a", { href: "#/empresas" }, "Ir para Empresas")));
     return;
   }
+  const [sistemaBD, comandosBD] = novo ? [null, []] : await Promise.all([
+    q(sb.from("sistemas").select("*, empresas(nome)").eq("id", idTexto).maybeSingle()),
+    q(sb.from("sistema_comandos").select("*").eq("sistema_id", idTexto)),
+  ]);
+  if (!novo && !sistemaBD) { c.replaceChildren(h("div", { class: "card" }, "Sistema não encontrado.")); return; }
+  const s = sistemaBD || { nome: "", empresa_id: empresas[0].id, ativo: true, empresa_devmaster: "Loja/Gerencial", modulo_devmaster: "Gestão Varejo Atacado" };
 
   const nome = h("input", { type: "text", id: "sn", value: s.nome, maxlength: 120, required: true });
   const empresa = h("select", { id: "se" }, empresas.map((e) => h("option", { value: e.id, selected: e.id === s.empresa_id }, e.nome)));
-  const dmEmpresa = h("input", { type: "text", id: "sde", value: s.devmaster_empresa, maxlength: 80 });
-  const dmModulo = h("input", { type: "text", id: "sdm", value: s.devmaster_modulo, maxlength: 80 });
+  const dmEmpresa = h("input", { type: "text", id: "sde", value: s.empresa_devmaster, maxlength: 80 });
+  const dmModulo = h("input", { type: "text", id: "sdm", value: s.modulo_devmaster, maxlength: 80 });
   const ativo = h("input", { type: "checkbox", checked: !!s.ativo });
 
-  // comandos: um bloco por item do catálogo
-  const ativosCmd = new Map((det?.comandos || []).map((x) => [x.comando, x]));
-  const blocos = Object.entries(catalogo).map(([nomeCmd, info]) => {
-    const atual = ativosCmd.get(nomeCmd);
-    return { nomeCmd, marca: h("input", { type: "checkbox", checked: novo ? true : !!atual }),
+  const marcados = new Map(comandosBD.map((x) => [x.comando, x]));
+  const blocos = catalogo.map((info) => {
+    const atual = marcados.get(info.comando);
+    return { info, marca: h("input", { type: "checkbox", checked: novo ? true : !!atual }),
       titulo: h("input", { type: "text", value: atual?.titulo || "", placeholder: info.titulo, maxlength: 40, "aria-label": "Título do botão" }),
-      arquivo: h("input", { type: "text", value: atual?.arquivo || "", placeholder: info.arquivo, maxlength: 80, "aria-label": "Nome do arquivo gerado" }), info };
+      arquivo: h("input", { type: "text", value: atual?.arquivo || "", placeholder: info.arquivo_padrao, maxlength: 80, "aria-label": "Nome do arquivo gerado" }) };
   });
-  const comandos = () => blocos.filter((b) => b.marca.checked).map((b) => ({ comando: b.nomeCmd, titulo: b.titulo.value, arquivo: b.arquivo.value }));
+  const comandos = () => blocos.filter((b) => b.marca.checked).map((b) => ({ comando: b.info.comando, titulo: b.titulo.value.trim(), arquivo: b.arquivo.value.trim() }));
 
   const salvar = () => tentar(async () => {
-    const corpo = { nome: nome.value, empresa_id: Number(empresa.value), ativo: ativo.checked, devmaster_empresa: dmEmpresa.value, devmaster_modulo: dmModulo.value, comandos: comandos() };
+    if (!nome.value.trim()) throw new Error("Informe o nome do sistema");
     if (novo) {
-      const r = await api("POST", "/sistemas", corpo);
+      const r = await q(sb.rpc("criar_sistema", { p_empresa_id: empresa.value, p_nome: nome.value.trim(), p_empresa_devmaster: dmEmpresa.value.trim(), p_modulo_devmaster: dmModulo.value.trim(), p_comandos: comandos() }));
       location.hash = `#/sistema/${r.id}`;
       mostrarChave(r.chave, "Sistema criado");
-    } else { await api("PUT", `/sistemas/${s.id}`, corpo); aviso("Sistema salvo"); rota(); }
+    } else {
+      await q(sb.from("sistemas").update({ empresa_id: empresa.value, nome: nome.value.trim(), ativo: ativo.checked, empresa_devmaster: dmEmpresa.value.trim(), modulo_devmaster: dmModulo.value.trim() }).eq("id", s.id));
+      await q(sb.rpc("salvar_comandos", { p_sistema_id: s.id, p_comandos: comandos() }));
+      aviso("Sistema salvo");
+    }
   });
 
   const partes = [
-    h("div", { class: "cabeca" }, h("div", {}, h("div", { class: "sobre" }, novo ? "Novo" : s.empresa_nome), h("h1", {}, novo ? "Novo sistema" : s.nome)),
+    h("div", { class: "cabeca" }, h("div", {}, h("div", { class: "sobre" }, novo ? "Novo" : sistemaBD.empresas?.nome), h("h1", {}, novo ? "Novo sistema" : s.nome)),
       h("a", { href: "#/" }, "← Voltar")),
     h("div", { class: "card" }, h("h2", {}, "Dados"),
       h("div", { class: "campos" },
-        h("div", {}, h("label", { for: "sn" }, "Nome do sistema"), nome),
-        h("div", {}, h("label", { for: "se" }, "Empresa"), empresa),
-        h("div", {}, h("label", { for: "sde" }, "Empresa no login do DevMaster"), dmEmpresa),
-        h("div", {}, h("label", { for: "sdm" }, "Módulo no login do DevMaster"), dmModulo)),
+        h("div", {}, h("label", { for: "sn" }, "Nome do sistema"), nome), h("div", {}, h("label", { for: "se" }, "Empresa"), empresa),
+        h("div", {}, h("label", { for: "sde" }, "Empresa no login do DevMaster"), dmEmpresa), h("div", {}, h("label", { for: "sdm" }, "Módulo no login do DevMaster"), dmModulo)),
       h("p", { class: "mudo" }, "O robô escolhe esta empresa e este módulo na tela de login do DevMaster, e só depois gera o arquivo."),
       h("label", { class: "marcar" }, ativo, "Sistema ativo (desmarcar bloqueia os comandos na hora)")),
     h("div", { class: "card" }, h("h2", {}, "Arquivos que este sistema gera"),
-      blocos.map((b) => h("div", { class: "linha", style: null },
-        h("label", { class: "marcar fixo" }, b.marca, h("b", {}, b.nomeCmd)),
-        h("div", {}, h("label", {}, "Texto do botão"), b.titulo),
-        h("div", {}, h("label", {}, "Nome do arquivo (.xlsx)"), b.arquivo))),
+      blocos.map((b) => h("div", { class: "linha" }, h("label", { class: "marcar fixo" }, b.marca, h("b", {}, b.info.comando)),
+        h("div", {}, h("label", {}, "Texto do botão"), b.titulo), h("div", {}, h("label", {}, "Nome do arquivo (.xlsx)"), b.arquivo))),
       h("p", { class: "mudo" }, "Deixe em branco para usar o padrão. O arquivo é salvo em Downloads e enviado a quem pediu.")),
     h("div", { class: "linha" }, h("button", { class: "btn fixo", onclick: salvar }, novo ? "Criar sistema e gerar chave" : "Salvar alterações")),
   ];
-  if (!novo) partes.splice(3, 0, cartaoChave(s), cartaoContatos(s, det.contatos), h("div", { class: "card" }, h("h2", {}, "Últimas execuções"),
-    det.execucoes.length ? h("div", { class: "tabela-rolagem" }, tabelaExecucoes(det.execucoes, false)) : h("div", { class: "vazio" }, "Nada executado ainda.")),
-    h("div", { class: "card" }, h("h2", {}, "Zona de risco"), h("button", { class: "btn perigo",
-      onclick: () => confirmar("Excluir sistema", `Excluir “${s.nome}”? O programa instalado perde o acesso imediatamente.`, "Excluir", () => tentar(async () => { await api("DELETE", `/sistemas/${s.id}`); aviso("Sistema excluído"); location.hash = "#/"; })) }, "Excluir este sistema")));
+
+  if (novo) { c.replaceChildren(...partes); atualizadores = []; return; }
+
+  // Áreas que se atualizam ao vivo sem apagar o que você está digitando
+  const areaChave = h("div", { class: "card" });
+  const areaContatos = h("div", { class: "card" });
+  const areaExec = h("div", { class: "card" });
+  const carregarVivo = async () => {
+    const [sis, contatos, execs] = await Promise.all([
+      q(sb.from("sistemas").select("*").eq("id", s.id).maybeSingle()),
+      q(sb.from("contatos").select("*").eq("sistema_id", s.id).order("canal").order("nome")),
+      q(sb.from("execucoes").select("*").eq("sistema_id", s.id).order("id", { ascending: false }).limit(30)),
+    ]);
+    if (!sis) { location.hash = "#/"; return; }
+    areaChave.replaceChildren(...conteudoChave(sis));
+    areaContatos.replaceChildren(...conteudoContatos(sis, contatos));
+    areaExec.replaceChildren(h("h2", {}, "Últimas execuções"), execs.length ? h("div", { class: "tabela-rolagem" }, tabelaExecucoes(execs, false)) : h("div", { class: "vazio" }, "Nada executado ainda."));
+  };
+  const risco = h("div", { class: "card" }, h("h2", {}, "Zona de risco"), h("button", { class: "btn perigo",
+    onclick: () => confirmar("Excluir sistema", `Excluir “${s.nome}”? O programa instalado perde o acesso imediatamente.`, "Excluir", () => tentar(async () => { await q(sb.from("sistemas").delete().eq("id", s.id)); aviso("Sistema excluído"); location.hash = "#/"; })) }, "Excluir este sistema"));
+  partes.splice(3, 0, areaChave, areaContatos, areaExec);
+  partes.push(risco);
   c.replaceChildren(...partes);
+  atualizadores = [carregarVivo];
+  await carregarVivo();
 }
 
-function cartaoChave(s) {
-  return h("div", { class: "card" }, h("h2", {}, "Chave de acesso"),
+function conteudoChave(s) {
+  return [h("h2", {}, "Chave de acesso"),
     h("p", {}, "Final ", h("span", { class: "mono" }, `••••${s.chave_final}`), " · criada ", quando(s.chave_criada_em)),
-    s.host ? h("p", { class: "mudo" }, `Computador: ${s.host} · versão ${s.versao || "?"} · ${s.online ? "online" : "offline"} (${quando(s.ultimo_contato)})`) : h("p", { class: "mudo" }, "O programa ainda não se conectou."),
+    s.computador ? h("p", { class: "mudo" }, `Computador: ${s.computador} · versão ${s.versao || "?"} · ${estaOnline(s) ? "online" : "offline"} (${quando(s.ultimo_contato)})`) : h("p", { class: "mudo" }, "O programa ainda não se conectou."),
     h("button", { class: "btn sec", onclick: () => confirmar("Gerar nova chave", "A chave atual para de funcionar na hora. Você precisará colar a nova no programa deste cliente.", "Gerar nova chave",
-      () => tentar(async () => { const r = await api("POST", `/sistemas/${s.id}/chave`); mostrarChave(r.chave, "Nova chave"); rota(); })) }, "Gerar nova chave"));
+      () => tentar(async () => { const chave = await q(sb.rpc("gerar_nova_chave", { p_sistema_id: s.id })); mostrarChave(chave, "Nova chave"); })) }, "Gerar nova chave")];
 }
 
-function cartaoContatos(s, contatos) {
+function conteudoContatos(s, contatos) {
   const canal = h("select", { id: "cc", "aria-label": "Canal" }, h("option", { value: "whatsapp" }, "WhatsApp (número)"), h("option", { value: "telegram" }, "Telegram (ID)"));
-  const ident = h("input", { type: "text", id: "ci", placeholder: "5511999998888", inputmode: "numeric", maxlength: 20 });
+  const ident = h("input", { type: "text", id: "ci", placeholder: "5511999998888", inputmode: "numeric", maxlength: 24 });
   const nomeC = h("input", { type: "text", id: "cn", placeholder: "Quem é (opcional)", maxlength: 80 });
   canal.addEventListener("change", () => (ident.placeholder = canal.value === "whatsapp" ? "5511999998888" : "ID numérico do Telegram"));
   const grupo = (cn, titulo) => {
@@ -271,15 +370,19 @@ function cartaoContatos(s, contatos) {
       h("td", {}, x.nome || "—"), h("td", { class: "mono" }, x.identificador),
       h("td", {}, h("span", { class: "selo " + (x.ativo ? "ok" : "offline") }, x.ativo ? "permitido" : "pausado")),
       h("td", {}, h("div", { class: "linha" },
-        h("button", { class: "btn sec mini fixo", onclick: () => tentar(async () => { await api("PUT", `/contatos/${x.id}`, { identificador: x.identificador, nome: x.nome, ativo: !x.ativo }); rota(); }) }, x.ativo ? "Pausar" : "Permitir"),
-        h("button", { class: "btn perigo mini fixo", onclick: () => confirmar("Remover", `Remover ${x.nome || x.identificador}?`, "Remover", () => tentar(async () => { await api("DELETE", `/contatos/${x.id}`); rota(); })) }, "Remover"))))))
+        h("button", { class: "btn sec mini fixo", onclick: () => tentar(async () => { await q(sb.from("contatos").update({ ativo: !x.ativo }).eq("id", x.id)); }) }, x.ativo ? "Pausar" : "Permitir"),
+        h("button", { class: "btn perigo mini fixo", onclick: () => confirmar("Remover", `Remover ${x.nome || x.identificador}?`, "Remover", () => tentar(async () => { await q(sb.from("contatos").delete().eq("id", x.id)); })) }, "Remover"))))))
       : h("div", { class: "vazio" }, "Ninguém cadastrado."));
   };
-  return h("div", { class: "card" }, h("h2", {}, "Quem pode pedir (números e IDs permitidos)"),
+  return [h("h2", {}, "Quem pode pedir (números e IDs permitidos)"),
     h("div", { class: "tabela-rolagem" }, grupo("whatsapp", "WhatsApp"), grupo("telegram", "Telegram")),
-    h("div", { class: "linha", style: null }, h("div", {}, h("label", { for: "cc" }, "Canal"), canal), h("div", {}, h("label", { for: "ci" }, "Número / ID"), ident), h("div", {}, h("label", { for: "cn" }, "Nome"), nomeC),
-      h("button", { class: "btn fixo", onclick: () => tentar(async () => { await api("POST", `/sistemas/${s.id}/contatos`, { canal: canal.value, identificador: ident.value, nome: nomeC.value }); aviso("Contato adicionado"); rota(); }) }, "Adicionar")),
-    h("p", { class: "mudo" }, "As mudanças chegam ao programa em até 5 minutos. Quem não está na lista não recebe resposta."));
+    h("div", { class: "linha" }, h("div", {}, h("label", { for: "cc" }, "Canal"), canal), h("div", {}, h("label", { for: "ci" }, "Número / ID"), ident), h("div", {}, h("label", { for: "cn" }, "Nome"), nomeC),
+      h("button", { class: "btn fixo", onclick: () => tentar(async () => {
+        const digitos = ident.value.replace(/\D/g, ""); // aceita +55 (11) 99999-8888
+        await q(sb.from("contatos").insert({ sistema_id: s.id, canal: canal.value, identificador: digitos, nome: nomeC.value.trim() }));
+        ident.value = ""; nomeC.value = ""; aviso("Contato adicionado");
+      }) }, "Adicionar")),
+    h("p", { class: "mudo" }, "As mudanças chegam ao programa em até 5 minutos. Quem não está na lista não recebe resposta.")];
 }
 
 // ---------------- Rotas ----------------
@@ -287,26 +390,38 @@ async function rota() {
   const c = document.getElementById("conteudo");
   if (!c) return;
   marcarMenu();
+  atualizadores = [];
   const hash = location.hash || "#/";
   try {
     let m;
     if (hash === "#/" || hash === "") await paginaSistemas(c);
     else if (hash === "#/empresas") await paginaEmpresas(c);
     else if (hash === "#/execucoes") await paginaExecucoes(c);
-    else if ((m = /^#\/sistema\/(novo|\d+)$/.exec(hash))) await paginaSistema(c, m[1]);
+    else if ((m = /^#\/sistema\/(novo|[0-9a-f-]{36})$/.exec(hash))) await paginaSistema(c, m[1]);
     else c.replaceChildren(h("div", { class: "card" }, "Página não encontrada."));
-  } catch (e) { if (e.message !== "Sessão expirada") c.replaceChildren(h("div", { class: "card" }, h("p", {}, e.message))); }
+  } catch (e) { c.replaceChildren(h("div", { class: "card" }, h("p", {}, e.message))); }
 }
 
 async function iniciar() {
+  const { data } = await sb.auth.getSession();
+  const usuario = data.session?.user;
+  if (!usuario) return mostrarLogin();
   try {
-    const sessao = await api("GET", "/sessao");
-    if (!sessao.autenticado) return mostrarLogin();
-    catalogo = await api("GET", "/catalogo");
-    estrutura();
-    rota();
-  } catch { mostrarLogin(); }
+    const admin = await q(sb.from("administradores").select("usuario_id").maybeSingle());
+    if (!admin) return semAcesso(usuario);
+    catalogo = await q(sb.from("catalogo_comandos").select("*").order("comando"));
+  } catch (e) { return mostrarLogin(e.message); }
+  estrutura(usuario);
+  escutarMudancas();
+  rota();
 }
 
-window.addEventListener("hashchange", rota);
-iniciar();
+if (!window.CONFIG?.SUPABASE_URL || !window.CONFIG?.SUPABASE_PUBLISHABLE_KEY) {
+  semConfiguracao();
+} else {
+  sb = window.supabase.createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_PUBLISHABLE_KEY, {
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+  });
+  window.addEventListener("hashchange", rota);
+  iniciar();
+}

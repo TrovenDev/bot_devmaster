@@ -1,16 +1,16 @@
 {
   "name": "bot-devmaster-console",
   "private": true,
-  "version": "1.0.0",
+  "version": "2.0.0",
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
-    "migrar:local": "wrangler d1 migrations apply DB --local",
-    "migrar": "wrangler d1 migrations apply DB --remote",
-    "deploy": "wrangler deploy",
-    "test": "node --test test/api.test.js"
+    "dev": "wrangler pages dev public --port 8788",
+    "deploy": "wrangler pages deploy public --project-name bot-devmaster-console",
+    "vendorizar": "node scripts/vendorizar.mjs",
+    "test": "node --test test/"
   },
   "devDependencies": {
+    "@supabase/supabase-js": "^2.118.0",
     "wrangler": "^4"
   }
 }

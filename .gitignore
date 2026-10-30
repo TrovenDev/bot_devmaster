@@ -19,3 +19,6 @@ __pycache__/
 # Console (Cloudflare)
 console/node_modules/
 console/.wrangler/
+
+# Supabase CLI
+supabase/.temp/
