@@ -10,6 +10,9 @@ import logging
 import os
 import re
 import subprocess
+import ssl
+
+import certifi
 import sys
 import threading
 import urllib.error
@@ -46,7 +49,9 @@ class Atualizador:
     def _abrir(url):
         req = urllib.request.Request(url, headers={"User-Agent": f"BotDevMaster/{VERSION}",
                                                    "Accept": "application/vnd.github+json"})
-        return urllib.request.urlopen(req, timeout=60)
+        contexto = ssl.create_default_context()
+        contexto.load_verify_locations(cafile=certifi.where())
+        return urllib.request.urlopen(req, timeout=60, context=contexto)
 
     def _definir(self, texto):
         if texto != self.status:

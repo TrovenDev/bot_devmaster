@@ -123,6 +123,15 @@ class TestWhatsApp(Base):
 
 
 class TestAtualizador(unittest.TestCase):
+    def test_https_verifica_certificado_com_raizes_empacotadas(self):
+        contexto = mock.Mock()
+        with mock.patch.object(atualizador.ssl, "create_default_context", return_value=contexto), \
+             mock.patch.object(atualizador.certifi, "where", return_value="raizes.pem"), \
+             mock.patch.object(atualizador.urllib.request, "urlopen") as abrir:
+            atualizador.Atualizador._abrir("https://api.github.com")
+        contexto.load_verify_locations.assert_called_once_with(cafile="raizes.pem")
+        self.assertIs(abrir.call_args.kwargs["context"], contexto)
+
     def test_versoes(self):
         v = atualizador.versao_tupla
         self.assertEqual(v("v1.2.3"), (1, 2, 3))
@@ -162,6 +171,35 @@ class TestAtualizador(unittest.TestCase):
 
 
 class TestRemoto(Base):
+    def test_permissoes_mudam_sem_reiniciar_o_bot(self):
+        with tempfile.TemporaryDirectory() as d:
+            g = remoto.Gestao("https://painel", "dmb_chave", d, "1.0.0")
+            inicial = {"whatsapp": {"numeros": ["5511999991234"]}, "telegram": {"ids": [123]}}
+            nova = {"whatsapp": {"numeros": ["5511888885678"]}, "telegram": {"ids": [456]}}
+            g.ao_mudar = mock.Mock()
+            with mock.patch.object(g, "_pedir", side_effect=[inicial, nova]):
+                g._atualizar_config()
+                self.assertTrue(whatsapp.WhatsApp._permitido(["5511999991234"]))
+                self.assertEqual(CONFIG.ids_telegram(), {123})
+                g._atualizar_config()
+                self.assertFalse(whatsapp.WhatsApp._permitido(["5511999991234"]))
+                self.assertTrue(whatsapp.WhatsApp._permitido(["5511888885678"]))
+                self.assertEqual(CONFIG.ids_telegram(), {456})
+            self.assertEqual(json.loads(g._cache.read_text(encoding="utf-8")), nova)
+            self.assertGreaterEqual(g.ao_mudar.call_count, 2)
+
+    def test_gestao_usa_certificados_sem_desativar_https(self):
+        with tempfile.TemporaryDirectory() as d:
+            g = remoto.Gestao("https://painel", "dmb_chave", d, "1.0.0")
+            contexto = mock.Mock()
+            with mock.patch.object(remoto.ssl, "create_default_context", return_value=contexto), \
+                 mock.patch.object(remoto.certifi, "where", return_value="raizes.pem"), \
+                 mock.patch.object(remoto.urllib.request, "urlopen") as abrir:
+                abrir.return_value.__enter__.return_value.read.return_value = b'{}'
+                self.assertEqual(g._pedir("GET", "/config"), {})
+            contexto.load_verify_locations.assert_called_once_with(cafile="raizes.pem")
+            self.assertIs(abrir.call_args.kwargs["context"], contexto)
+
     def test_chave_revogada_bloqueia_e_servidor_fora_usa_cache(self):
         with tempfile.TemporaryDirectory() as d:
             g = remoto.Gestao("http://x", "dmb_chave", d, "1.0.0")

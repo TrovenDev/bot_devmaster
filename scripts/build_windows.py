@@ -90,6 +90,7 @@ def main():
         sys.executable, "-m", "PyInstaller", "--noconfirm", "--onefile", "--windowed",
         "--name", "DevMasterBot", "--icon", str(APP / "assets" / "troven-app.ico"),
         "--paths", str(APP),
+        "--collect-data", "certifi",
         "--add-data", f"{APP / 'assets'}{sep}assets",
         "--hidden-import", "win32ui", "--hidden-import", "pystray._win32",
         "--distpath", str(DIST), "--workpath", str(RAIZ / "build"), "--specpath", str(RAIZ / "build"),

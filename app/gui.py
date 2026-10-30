@@ -128,17 +128,6 @@ class Painel(tk.Tk):
         abas = ttk.Notebook(self)
         abas.pack(fill="x", padx=16)
         abas.add(self._aba_inicio(abas), text="Início")
-        abas.add(self._aba_gestao(abas), text="Gestão")
-        abas.add(self._aba_campos(abas, "whatsapp", "WHATSAPP · EVOLUTION API",
-                                  "Mensagens chegam por consulta à API, sem abrir porta no servidor. "
-                                  "Números com DDI e DDD, ex.: 5511999998888. Com servidor de gestão, "
-                                  "os números permitidos vêm de lá."), text="WhatsApp")
-        abas.add(self._aba_campos(abas, "telegram", "TELEGRAM",
-                                  "Não sabe seu ID? Inicie o bot e mande /id para ele."), text="Telegram")
-        abas.add(self._aba_campos(abas, "devmaster", "DEVMASTER",
-                                  "O robô abre o sistema por este login e escolhe a empresa e o módulo "
-                                  "abaixo. Com servidor de gestão, empresa e módulo vêm de lá."),
-                 text="DevMaster")
         abas.add(self._aba_inspecao(abas), text="Inspecionar")
         self._area_log()
 
@@ -214,6 +203,8 @@ class Painel(tk.Tk):
         self.lb_atualizacao.grid(row=4, column=1, sticky="w")
         ttk.Button(f, text="Verificar atualização agora", style="Secundario.TButton",
                    command=self.verificar_agora).grid(row=5, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        self.lb_gestao = ttk.Label(f, text="Status: aguardando painel", style="Dica.TLabel", wraplength=700)
+        self.lb_gestao.grid(row=6, column=0, columnspan=2, sticky="w", pady=(10, 0))
         return f
 
     def _aba_gestao(self, pai):

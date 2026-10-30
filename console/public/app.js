@@ -618,7 +618,7 @@ function conteudoContatos(s, contatos) {
         await q(sb.from("contatos").insert({ sistema_id: s.id, canal: canal.value, identificador: digitos, nome: nomeC.value.trim() }));
         ident.value = ""; nomeC.value = ""; aviso("Contato adicionado");
       }) }, "Adicionar")),
-    h("p", { class: "mudo" }, "As mudanças chegam ao programa em até 5 minutos. Quem não está na lista não recebe resposta.")];
+    h("p", { class: "mudo" }, "As mudanças chegam ao programa em até 15 segundos (com o programa conectado). Quem não está na lista não recebe resposta.")];
 }
 
 // ---------------- Rotas ----------------

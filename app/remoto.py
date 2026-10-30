@@ -5,6 +5,9 @@ import json
 import logging
 import os
 import socket
+import ssl
+
+import certifi
 import threading
 import urllib.error
 import urllib.request
@@ -15,7 +18,7 @@ from configuracao import CONFIG
 
 log = logging.getLogger("gestao")
 
-INTERVALO = 300  # segundos entre consultas
+INTERVALO = 15  # segundos entre consultas
 
 
 class Gestao:
@@ -38,7 +41,9 @@ class Gestao:
             headers={"Authorization": f"Bearer {self.chave}", "Content-Type": "application/json",
                      "User-Agent": f"BotDevMaster/{self.versao}"},
             data=json.dumps(corpo).encode("utf-8") if corpo is not None else None)
-        with urllib.request.urlopen(req, timeout=20) as r:
+        contexto = ssl.create_default_context()
+        contexto.load_verify_locations(cafile=certifi.where())
+        with urllib.request.urlopen(req, timeout=20, context=contexto) as r:
             return json.loads(r.read().decode("utf-8") or "{}")
 
     # ---------------- Ciclo ----------------
@@ -57,7 +62,12 @@ class Gestao:
         except Exception as e:
             self._usar_cache(f"sem conexão ({type(e).__name__})")
             return
+        mudou = CONFIG.remota != dados
         CONFIG.definir_remota(dados)
+        if mudou:
+            log.info("Permissoes sincronizadas: WhatsApp %d numeros; Telegram %d IDs.",
+                     len(CONFIG.numeros_whatsapp()), len(CONFIG.ids_telegram()))
+            self.ao_mudar()
         try:
             self._cache.write_text(json.dumps(dados, ensure_ascii=False), encoding="utf-8")
         except OSError:
