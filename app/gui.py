@@ -209,6 +209,15 @@ class Painel(tk.Tk):
         self.bt_atualizar.grid_remove()
         self.lb_gestao = ttk.Label(f, text="Status: aguardando painel", style="Dica.TLabel", wraplength=700)
         self.lb_gestao.grid(row=6, column=0, columnspan=2, sticky="w", pady=(10, 0))
+        credenciais = ttk.LabelFrame(f, text="Login do sistema DevMaster", padding=12)
+        credenciais.grid(row=7, column=0, columnspan=2, sticky="we", pady=(12, 0))
+        credenciais.columnconfigure(1, weight=1)
+        ttk.Label(credenciais, text="Usuario").grid(row=0, column=0, sticky="w", padx=(0, 12), pady=4)
+        ttk.Entry(credenciais, textvariable=self.vars["DEVMASTER_USER"]).grid(row=0, column=1, sticky="we", pady=4)
+        ttk.Label(credenciais, text="Senha").grid(row=1, column=0, sticky="w", padx=(0, 12), pady=4)
+        ttk.Entry(credenciais, textvariable=self.vars["DEVMASTER_PASS"], show="*").grid(row=1, column=1, sticky="we", pady=4)
+        ttk.Button(credenciais, text="Salvar login e senha", style="Primario.TButton",
+                   command=lambda: self.salvar(reconectar=False)).grid(row=2, column=1, sticky="w", pady=(8, 0))
         return f
 
     def _aba_gestao(self, pai):
