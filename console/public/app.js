@@ -74,11 +74,24 @@ function quando(iso) {
 
 const estaOnline = (s) => !!s.ultimo_contato && Date.now() - new Date(s.ultimo_contato).getTime() < ONLINE_MS;
 
-function janela(titulo, corpo, acoes) {
-  const fundo = h("div", { class: "fundo", role: "dialog", "aria-modal": "true", "aria-label": titulo },
-    h("div", { class: "janela" }, h("h2", {}, titulo), corpo, h("div", { class: "acoes" }, acoes(() => fundo.remove()))));
-  fundo.addEventListener("click", (e) => { if (e.target === fundo) fundo.remove(); });
+function janela(titulo, corpo, acoes, sheet = false) {
+  const anterior = document.activeElement;
+  const painel = h("div", { class: sheet ? "janela sheet" : "janela", tabindex: "-1" });
+  const fundo = h("div", { class: "fundo" + (sheet ? " fundo-sheet" : ""), role: "dialog", "aria-modal": "true", "aria-label": titulo }, painel);
+  const fechar = () => { fundo.remove(); document.body.style.overflow = ""; anterior?.focus(); };
+  painel.append(h("div", { class: "sheet-topo" }, h("h2", {}, titulo), h("button", { class: "btn sec mini", "aria-label": "Fechar", onclick: fechar }, "?")), corpo, h("div", { class: "acoes" }, acoes(fechar)));
+  fundo.addEventListener("click", (e) => { if (e.target === fundo) fechar(); });
+  fundo.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") fechar();
+    if (e.key !== "Tab") return;
+    const itens = [...painel.querySelectorAll('button, input, select, textarea, a[href]')].filter(el => !el.disabled);
+    const primeiro = itens[0], ultimo = itens.at(-1);
+    if (e.shiftKey && (document.activeElement === primeiro || document.activeElement === painel)) { e.preventDefault(); ultimo?.focus(); }
+    else if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primeiro?.focus(); }
+  });
   document.body.append(fundo);
+  document.body.style.overflow = "hidden";
+  painel.focus();
   return fundo;
 }
 
@@ -215,19 +228,36 @@ async function paginaSistemas(c) {
 
 async function paginaEmpresas(c) {
   const editar = (e = {}) => {
-    const nome = h("input", { type: "text", id: "en", value: e.nome || "", maxlength: 120 });
+    const nome = h("input", { type: "text", id: "en", value: e.nome || "", maxlength: 120, required: true });
     const doc = h("input", { type: "text", id: "ed", value: e.documento || "", maxlength: 30 });
     const obs = h("input", { type: "text", id: "eo", value: e.observacao || "", maxlength: 500 });
     const ativa = h("input", { type: "checkbox", checked: e.id ? !!e.ativa : true });
+    const status = h("p", { class: "mudo", role: "status", "aria-live": "polite" }, "Consulte o CNPJ para preencher o nome da empresa.");
+    const consultar = h("button", { class: "btn sec", type: "button", onclick: () => tentar(async () => {
+      const cnpj = doc.value.replace(/\D/g, "");
+      if (cnpj.length !== 14) throw new Error("Informe um CNPJ com 14 d?gitos.");
+      consultar.disabled = true; status.textContent = "Consultando CNPJ?";
+      try {
+        const { data } = await sb.auth.getSession();
+        const r = await fetch(`/api/cnpj/${cnpj}`, { headers: { Authorization: `Bearer ${data.session?.access_token || ""}` } });
+        const dados = await r.json();
+        if (!r.ok) throw new Error(dados.erro || "N?o foi poss?vel consultar o CNPJ.");
+        if (doc.value.replace(/\D/g, "") !== cnpj) { status.textContent = "CNPJ alterado. Consulte novamente."; return; }
+        nome.value = dados.nome; doc.value = cnpj;
+        status.textContent = "Empresa encontrada. Confira os dados antes de salvar.";
+      } catch (erro) { status.textContent = erro.message; throw erro; }
+      finally { consultar.disabled = false; }
+    }) }, "Consultar CNPJ");
     janela(e.id ? "Editar empresa" : "Nova empresa",
-      h("div", { class: "campos" }, h("div", {}, h("label", { for: "en" }, "Nome"), nome), h("div", {}, h("label", { for: "ed" }, "CNPJ / documento"), doc),
+      h("div", { class: "campos" }, h("div", {}, h("label", { for: "en" }, "Nome"), nome), h("div", {}, h("label", { for: "ed" }, "CNPJ"), doc, consultar, status),
         h("div", {}, h("label", { for: "eo" }, "Observação"), obs), h("label", { class: "marcar" }, ativa, "Empresa ativa")),
       (fechar) => [h("button", { class: "btn sec", onclick: fechar }, "Cancelar"),
         h("button", { class: "btn", onclick: () => tentar(async () => {
+          if (!nome.value.trim()) { nome.focus(); throw new Error("Informe o nome da empresa."); }
           const corpo = { nome: nome.value.trim(), documento: doc.value.trim(), observacao: obs.value.trim(), ativa: ativa.checked };
           await q(e.id ? sb.from("empresas").update(corpo).eq("id", e.id) : sb.from("empresas").insert(corpo));
           fechar(); aviso("Empresa salva");
-        }) }, "Salvar")]);
+        }) }, "Salvar")], true);
   };
   const lista = h("div", { class: "card tabela-rolagem" });
   c.replaceChildren(
@@ -376,7 +406,7 @@ function conteudoContatos(s, contatos) {
   };
   return [h("h2", {}, "Quem pode pedir (números e IDs permitidos)"),
     h("div", { class: "tabela-rolagem" }, grupo("whatsapp", "WhatsApp"), grupo("telegram", "Telegram")),
-    h("div", { class: "linha" }, h("div", {}, h("label", { for: "cc" }, "Canal"), canal), h("div", {}, h("label", { for: "ci" }, "Número / ID"), ident), h("div", {}, h("label", { for: "cn" }, "Nome"), nomeC),
+    h("div", { class: "linha contato-form" }, h("div", {}, h("label", { for: "cc" }, "Canal"), canal), h("div", {}, h("label", { for: "ci" }, "Número / ID"), ident), h("div", {}, h("label", { for: "cn" }, "Nome"), nomeC),
       h("button", { class: "btn fixo", onclick: () => tentar(async () => {
         const digitos = ident.value.replace(/\D/g, ""); // aceita +55 (11) 99999-8888
         await q(sb.from("contatos").insert({ sistema_id: s.id, canal: canal.value, identificador: digitos, nome: nomeC.value.trim() }));

@@ -7,7 +7,7 @@
     "dev": "wrangler pages dev public --port 8788",
     "deploy": "wrangler pages deploy public --project-name bot-devmaster-console",
     "vendorizar": "node scripts/vendorizar.mjs",
-    "test": "node --test test/"
+    "test": "node --test test/*.test.js"
   },
   "devDependencies": {
     "@supabase/supabase-js": "^2.118.0",

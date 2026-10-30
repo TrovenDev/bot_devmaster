@@ -82,3 +82,16 @@ npm test             # testes da API do programa (Supabase simulado)
 - Chaves de 244 bits, mostradas uma vez; gerar outra invalida a anterior. Desativar o sistema ou a empresa esvazia
   comandos e contatos na próxima consulta; excluir o sistema bloqueia o programa na hora.
 - O histórico de execuções é apagado depois de 90 dias (pg_cron).
+
+## Consulta de CNPJ (BrasilAPI)
+
+O cadastro consulta a BrasilAPI, sem chave de API, pelo endpoint
+`https://brasilapi.com.br/api/cnpj/v1/{cnpj}`. A rota `/api/cnpj/:cnpj`
+verifica a sessao Supabase e o acesso de administrador antes da consulta.
+Nao e necessario configurar variaveis RAPIDAPI no Cloudflare.
+
+Como no Vitalicia, os nomes recebem tratamento de maiusculas, conectores e
+siglas societarias, removendo numeros de CNPJ nas extremidades do nome.
+O nome fantasia tem preferencia; na ausencia dele, usa a razao social.
+
+Empresas e contatos usam sheets laterais; sistemas usam pagina propria.
