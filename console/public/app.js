@@ -279,28 +279,40 @@ async function paginaSistemas(c) {
 async function paginaEmpresas(c) {
   const editar = (e = {}) => {
     const nome = h("input", { type: "text", id: "en", value: e.nome || "", maxlength: 120, required: true });
-    const doc = h("input", { type: "text", id: "ed", value: e.documento || "", maxlength: 30 });
+    const doc = h("input", { type: "text", id: "ed", value: e.documento || "", maxlength: 18, inputmode: "numeric", autocomplete: "off", placeholder: "00.000.000/0000-00", "aria-describedby": "cnpj-status" });
     const obs = h("input", { type: "text", id: "eo", value: e.observacao || "", maxlength: 500 });
-    const ativa = h("input", { type: "checkbox", checked: e.id ? !!e.ativa : true });
-    const status = h("p", { class: "mudo", role: "status", "aria-live": "polite" }, "Consulte o CNPJ para preencher o nome da empresa.");
-    const consultar = h("button", { class: "btn sec", type: "button", onclick: () => tentar(async () => {
-      const cnpj = doc.value.replace(/\D/g, "");
-      if (cnpj.length !== 14) throw new Error("Informe um CNPJ com 14 d?gitos.");
-      consultar.disabled = true; status.textContent = "Consultando CNPJ?";
+    const ativa = h("input", { type: "checkbox", role: "switch", class: "toggle", id: "empresa-ativa", checked: e.id ? !!e.ativa : true });
+    const situacao = h("span", {}, ativa.checked ? "Ativa" : "Inativa");
+    ativa.addEventListener("change", () => { situacao.textContent = ativa.checked ? "Ativa" : "Inativa"; });
+    const status = h("p", { id: "cnpj-status", class: "mudo", role: "status", "aria-live": "polite" }, "Informe o CNPJ para preencher o nome automaticamente.");
+    let consulta = 0;
+    let ultimoCnpj = "";
+    doc.addEventListener("input", async () => {
+      const cnpj = doc.value.replace(/\D/g, "").slice(0, 14);
+      doc.value = cnpj.replace(/^(\d{2})(\d)/, "$1.$2").replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3").replace(/\.(\d{3})(\d)/, ".$1/$2").replace(/(\d{4})(\d)/, "$1-$2");
+      if (cnpj === ultimoCnpj) return;
+      ultimoCnpj = cnpj;
+      const atual = ++consulta;
+      if (cnpj.length !== 14) { status.textContent = "Informe os 14 d\u00edgitos do CNPJ."; return; }
+      status.textContent = "Consultando CNPJ\u2026";
       try {
         const { data } = await sb.auth.getSession();
+        if (atual !== consulta) return;
         const r = await fetch(`/api/cnpj/${cnpj}`, { headers: { Authorization: `Bearer ${data.session?.access_token || ""}` } });
         const dados = await r.json();
-        if (!r.ok) throw new Error(dados.erro || "N?o foi poss?vel consultar o CNPJ.");
-        if (doc.value.replace(/\D/g, "") !== cnpj) { status.textContent = "CNPJ alterado. Consulte novamente."; return; }
-        nome.value = dados.nome; doc.value = cnpj;
+        if (atual !== consulta || !doc.isConnected) return;
+        if (!r.ok) throw new Error(dados.erro || "N\u00e3o foi poss\u00edvel consultar o CNPJ.");
+        nome.value = dados.nome;
         status.textContent = "Empresa encontrada. Confira os dados antes de salvar.";
-      } catch (erro) { status.textContent = erro.message; throw erro; }
-      finally { consultar.disabled = false; }
-    }) }, "Consultar CNPJ");
+      } catch (erro) {
+        if (atual !== consulta || !doc.isConnected) return;
+        status.textContent = erro.message;
+        ultimoCnpj = "";
+      }
+    });
     janela(e.id ? "Editar empresa" : "Nova empresa",
-      h("div", { class: "campos" }, h("div", {}, h("label", { for: "en" }, "Nome"), nome), h("div", {}, h("label", { for: "ed" }, "CNPJ"), doc, consultar, status),
-        h("div", {}, h("label", { for: "eo" }, "Observação"), obs), h("label", { class: "marcar" }, ativa, "Empresa ativa")),
+      h("div", { class: "campos" }, h("div", {}, h("label", { for: "ed" }, "CNPJ"), doc, status), h("div", {}, h("label", { for: "en" }, "Nome"), nome),
+        h("div", {}, h("label", { for: "eo" }, "Observação"), obs), h("div", {}, h("label", { for: "empresa-ativa" }, "Status"), h("label", { class: "marcar toggle-label" }, ativa, situacao))),
       (fechar) => [h("button", { class: "btn sec", onclick: fechar }, "Cancelar"),
         h("button", { class: "btn", onclick: () => tentar(async () => {
           if (!nome.value.trim()) { nome.focus(); throw new Error("Informe o nome da empresa."); }

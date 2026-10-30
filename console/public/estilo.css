@@ -149,3 +149,10 @@ body:has(.fundo) { overflow: hidden; }
 
 .sheet .janela-corpo { flex: 1; }
 .janela:focus { outline: none; }
+/* Status da empresa: switch compacto com a cor de acao Troven. */
+input[type=checkbox].toggle { position: relative; flex: 0 0 32px; width: 32px; height: 18px; margin: 4px 0; border-radius: 999px; background: #b8b8b8; box-shadow: none; transition: background .2s; }
+input[type=checkbox].toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border: 0; border-radius: 50%; background: white; box-shadow: 0 1px 2px #00000026; transform: none; transition: transform .2s; }
+input[type=checkbox].toggle:checked { background: var(--cobalto); }
+input[type=checkbox].toggle:checked::after { transform: translateX(14px); }
+.toggle-label { gap: 10px; }
+#cnpj-status { margin: 6px 0 0; font-size: 11px; }
