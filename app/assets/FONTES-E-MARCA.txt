@@ -1,0 +1,18 @@
+IDENTIDADE VISUAL TROVEN
+
+Fonte da identidade e dos logos: https://marca.troven.com.br/
+Manual de identidade visual 2026.
+Os logos foram obtidos no pacote oficial e redimensionados proporcionalmente.
+As cores oficiais utilizadas são Cobalto #2B35F0, Lima #C6F432,
+Noite #0F1020, Papel #F7F5F1 e Branco #FFFFFF.
+
+TIPOGRAFIA
+Inter — Copyright 2020 The Inter Project Authors.
+https://github.com/google/fonts/tree/main/ofl/inter
+Unbounded — Copyright 2022 The Unbounded Project Authors.
+https://github.com/google/fonts/tree/main/ofl/unbounded
+
+Arquivos estáticos de Inter Regular 400, Inter SemiBold 600 e
+Unbounded SemiBold 600 foram gerados a partir das fontes variáveis oficiais.
+As fontes são carregadas de forma privada pelo aplicativo, sem instalação
+permanente no Windows. As licenças SIL OFL 1.1 estão incluídas nesta pasta.

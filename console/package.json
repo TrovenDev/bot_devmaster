@@ -1,0 +1,16 @@
+{
+  "name": "bot-devmaster-console",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "migrar:local": "wrangler d1 migrations apply DB --local",
+    "migrar": "wrangler d1 migrations apply DB --remote",
+    "deploy": "wrangler deploy",
+    "test": "node --test test/api.test.js"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  }
+}

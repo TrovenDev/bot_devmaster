@@ -1,0 +1,21 @@
+# Segredos e dados locais: nunca versionar
+.env
+.env.*
+!.env.example
+.dev.vars
+bot.log
+config_remota.json
+atualizacoes/
+inspecoes/
+controles.txt
+
+# Build
+dist/
+build/
+*.spec
+__pycache__/
+*.pyc
+
+# Console (Cloudflare)
+console/node_modules/
+console/.wrangler/
