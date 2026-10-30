@@ -257,7 +257,8 @@ function estrutura(usuario, nomeAdmin = "") {
     h("aside", { class: "lateral" },
       h("div", { class: "lateral-marca" }, h("img", { src: "/troven-horizontal-negativo.svg", alt: "Troven" })),
       h("nav", { "aria-label": "Principal" }, link("#/", "Sistemas"), link("#/empresas", "Empresas"), link("#/execucoes", "Execuções")),
-      h("div", { class: "lateral-status" }, vivo),
+      h("div", { class: "lateral-status" }, vivo,
+        h("button", { class: "instalar-app", onclick: () => window.mostrarInstalacao() }, "Instalar app")),
       h("div", { class: "perfil" },
         h("span", { class: "avatar", "aria-hidden": "true" }, iniciais),
         h("div", { class: "perfil-dados" }, h("b", {}, exibicao), h("span", { title: usuario.email }, usuario.email)),
@@ -295,7 +296,10 @@ setInterval(() => atualizadores.forEach((f) => f().catch(() => {})), 60_000);
 
 // ---------------- Páginas ----------------
 const numero = (valor, rotulo, alerta = false) => h("div", { class: "numero" + (alerta ? " alerta" : "") }, h("b", {}, valor), h("span", {}, rotulo));
-const tabela = (cabecas, linhas) => h("table", {}, h("thead", {}, h("tr", {}, cabecas.map((t) => h("th", {}, t)))), h("tbody", {}, linhas));
+const tabela = (cabecas, linhas) => {
+  for (const linha of linhas) [...linha.children].forEach((celula, i) => celula.setAttribute("data-label", cabecas[i]));
+  return h("table", { class: "tabela-responsiva" }, h("thead", {}, h("tr", {}, cabecas.map((t) => h("th", { scope: "col" }, t)))), h("tbody", {}, linhas));
+};
 const seloSistema = (s) => (!s.ativo ? h("span", { class: "selo erro" }, "desativado") : estaOnline(s) ? h("span", { class: "selo online" }, "online") : h("span", { class: "selo offline" }, "offline"));
 
 async function paginaSistemas(c) {
@@ -558,7 +562,8 @@ async function paginaSistema(c, idTexto) {
       h("div", { class: "comandos-cab" }, h("span", {}, "Comando"), h("span", {}, "Texto do botão"), h("span", {}, "Nome do arquivo (.xlsx)")),
       blocos.map((b) => h("div", { class: "comando-linha" },
         h("label", { class: "marcar" }, b.marca, h("span", { class: "comando-nome" }, h("b", {}, b.info.titulo || b.info.comando), h("small", {}, b.info.comando))),
-        b.titulo, b.arquivo)))
+        h("label", { class: "comando-campo" }, h("span", {}, "Texto do botão"), b.titulo),
+        h("label", { class: "comando-campo" }, h("span", {}, "Nome do arquivo (.xlsx)"), b.arquivo))))
     : estadoVazio("Nenhum comando disponível", "O programa ainda não cadastrou comandos neste servidor.", null, true);
 
   const formulario = h("div", { class: "formulario" },

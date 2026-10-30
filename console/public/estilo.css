@@ -277,3 +277,92 @@ a.btn.sec { border-color: var(--linha); }
   .comandos-cab { display: none; }
   .comando-linha { grid-template-columns: 1fr; gap: 10px; }
 }
+
+/* Layout fluido, toque e áreas seguras de dispositivos instalados. */
+:root { --teclado: 0px; }
+.app > main, .card, .formulario, .campos > *, .comando-linha > *, .cabeca > div { min-width: 0; }
+main, .card, td, .estado-vazio, .perfil-dados, .chave { overflow-wrap: anywhere; }
+.campos { grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); }
+.grade { grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); }
+.lateral { padding-top: calc(16px + env(safe-area-inset-top)); padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+.app { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+.login { padding: calc(24px + env(safe-area-inset-top)) calc(24px + env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) calc(24px + env(safe-area-inset-left)); }
+.comando-campo { margin: 0; min-width: 0; }
+.comando-campo > span { display: none; }
+.barra-fixa, .empresas-selecao { bottom: calc(16px + env(safe-area-inset-bottom) + var(--teclado)); }
+#toast { bottom: calc(100px + env(safe-area-inset-bottom) + var(--teclado)); overflow-wrap: anywhere; }
+.janela { max-height: min(calc(100dvh - 32px), calc(var(--altura-visivel, 100dvh) - 32px)); }
+.sheet { height: var(--altura-visivel, 100dvh); max-height: var(--altura-visivel, 100dvh); }
+.sheet .sheet-topo { padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(24px, env(safe-area-inset-right)); }
+@media (min-width: 768px) and (max-width: 1100px) {
+  :root { --lateral: 200px; }
+  main { padding-inline: 20px; }
+  .comandos-cab, .comando-linha { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .comandos-cab { display: none; }
+  .comando-linha > .marcar { grid-column: 1 / -1; }
+  .comando-campo > span { display: block; margin-bottom: 4px; }
+}
+@media (max-width: 767px) {
+  .lateral { position: relative; padding-top: calc(12px + env(safe-area-inset-top)); padding-bottom: 0; }
+  .lateral nav { height: auto; min-height: 48px; }
+  .lateral nav a { flex: 1; justify-content: center; min-height: 48px; padding-inline: 8px; }
+  .lateral-marca img { max-width: 120px; height: auto; max-height: 28px; }
+  .avatar { display: none; }
+  .perfil-sair { min-height: 44px; }
+  .lateral-status { margin-left: auto; }
+  main { padding: 20px 16px calc(180px + env(safe-area-inset-bottom)); }
+  .grade { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .numero { padding: 14px; }
+  .numero b { font-size: 24px; }
+  button, .btn, .btn.mini, a.btn, input:not([type=checkbox]), select, .select-trigger, .select-opcao { min-height: 44px; height: auto; }
+  .btn, a.btn { padding-block: 10px; white-space: normal; text-align: center; }
+  input:not([type=checkbox]), select, textarea, .select-trigger { font-size: 16px; }
+  .marcar { min-height: 44px; }
+  input[type=checkbox] { width: 22px; height: 22px; flex-basis: 22px; }
+  input[type=checkbox].toggle { width: 32px; height: 18px; flex-basis: 32px; }
+  .empresas-busca input { font-size: 16px; }
+  .empresas-busca > .busca-icone { top: 16px; }
+  .empresas-toolbar > .btn { width: 100%; }
+  .empresas-paginacao { padding: 12px; justify-content: center; }
+  .empresas-paginacao nav { flex-wrap: wrap; justify-content: center; }
+  .empresas-paginacao button, .empresas-paginacao nav > span { width: 40px; min-height: 44px; }
+  .empresa-nome { overflow: visible; text-overflow: clip; }
+  .empresas-tabela td:nth-child(2) { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .empresas-tabela td { min-width: 0; flex-wrap: wrap; }
+  .empresas-tabela .col-selecao { min-height: 44px; align-items: center; }
+  .tabela-rolagem table { min-width: 0; }
+  .tabela-responsiva, .tabela-responsiva tbody { display: block; }
+  .tabela-responsiva thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .tabela-responsiva tr { display: block; padding: 12px; border: 1px solid var(--linha); border-radius: 6px; margin-bottom: 12px; }
+  .tabela-responsiva tr:last-child { margin-bottom: 0; }
+  .tabela-responsiva td { display: grid; grid-template-columns: minmax(80px, 32%) minmax(0, 1fr); gap: 12px; padding: 8px 0; border: 0; text-align: left; }
+  .tabela-responsiva td::before { content: attr(data-label); color: var(--grafite); font: 400 11px var(--fonte-ui); }
+  .tabela-responsiva td > * { min-width: 0; justify-self: start; }
+  .tabela-responsiva td .linha { width: 100%; }
+  .barra-fixa, .empresas-selecao { left: env(safe-area-inset-left); right: env(safe-area-inset-right); width: auto; margin-inline: 12px; }
+  .barra-acoes { width: 100%; flex-wrap: wrap; }
+  .barra-acoes > *, .empresas-selecao > button { flex: 1 1 100px; }
+  .comando-campo > span { display: block; margin-bottom: 4px; }
+  .comando-linha { padding: 12px; }
+  .fundo { padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+  .fundo-sheet { padding: 0; }
+  .sheet { width: 100%; }
+  .janela-corpo, .dialogo .janela-corpo { padding: 20px 16px; }
+  .janela .acoes, .dialogo .acoes { padding: 16px; padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+  .janela .acoes > * { flex: 1 1 120px; }
+  .sheet-topo { padding-inline: 16px; }
+  .sheet-topo button { min-width: 44px; min-height: 44px; }
+  .login { padding-inline: 16px; }
+  .login form { padding: 24px 20px; }
+  .chave > *, .risco > .btn { max-width: 100%; }
+  .risco > .btn { width: 100%; }
+}
+.instalar-app { display: block; margin-top: 12px; background: #ffffff12; color: white; }
+@media (max-width: 767px) {
+  .lateral-status { display: flex; align-items: center; gap: 8px; }
+  .instalar-app { margin: 0; padding-inline: 8px; font-size: 11px; }
+  .lateral-status .vivo { display: none; }
+}
+@media (max-width: 767px) {
+  .tabela-responsiva td .linha > .fixo { flex: 1 1 100%; }
+}

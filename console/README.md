@@ -95,3 +95,14 @@ siglas societarias, removendo numeros de CNPJ nas extremidades do nome.
 O nome fantasia tem preferencia; na ausencia dele, usa a razao social.
 
 Empresas e contatos usam sheets laterais; sistemas usam pagina propria.
+
+## PWA e dispositivos móveis
+
+O painel pode ser instalado no iPhone/iPad: abra a URL HTTPS no Safari, toque em
+Compartilhar, Adicionar à Tela de Início e Adicionar. O botão “Instalar app” no painel
+mostra essas instruções ou abre o convite de instalação quando disponível.
+
+As listas se adaptam ao celular, com controles de toque e espaço para as áreas seguras
+e o teclado. O painel exige conexão para ler e salvar dados. O service worker armazena
+somente a página e o estilo do aviso offline; não armazena APIs, chaves ou dados de clientes.
+Novas versões entram na próxima abertura, sem recarregar formulários em edição.
