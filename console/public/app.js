@@ -255,7 +255,7 @@ function estrutura(usuario, nomeAdmin = "") {
   const iniciais = exibicao.split(/[\s._-]+/).filter(Boolean).slice(0, 2).map((x) => x[0]).join("").toUpperCase() || "?";
   raiz.replaceChildren(h("div", { class: "app" },
     h("aside", { class: "lateral" },
-      h("div", { class: "lateral-marca" }, h("img", { src: "/troven-horizontal-negativo.svg", alt: "Troven" })),
+      h("div", { class: "lateral-marca" }, h("img", { src: "/troven-horizontal-positivo.svg", alt: "Troven" })),
       h("nav", { "aria-label": "Principal" }, link("#/", "Sistemas"), link("#/empresas", "Empresas"), link("#/execucoes", "Execuções")),
       h("div", { class: "lateral-status" }, vivo,
         h("button", { class: "instalar-app", onclick: () => window.mostrarInstalacao() }, "Instalar app")),

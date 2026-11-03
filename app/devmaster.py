@@ -14,6 +14,7 @@ import re
 import time
 import threading
 import queue
+import sys
 
 from pywinauto import Application, Desktop
 from pywinauto.controls.hwndwrapper import HwndWrapper
@@ -140,6 +141,35 @@ def _abrir_dialogo(janela, origem, destino, timeout=20):
                 raise RuntimeError("Falha ao abrir a proxima janela do relatorio.") from falhas.get()
             time.sleep(0.2)
     raise TimeoutError("A proxima janela do relatorio nao apareceu apos o acionamento.")
+
+
+def _campo_nome_arquivo(dialogo):
+    """Resolve o Edit dentro do FileNameControlHost/ComboBox do dialogo comum."""
+    candidatos = []
+    for campo in dialogo.descendants(class_name="Edit"):
+        atual = campo
+        for _ in range(5):
+            if atual.handle == dialogo.handle:
+                break
+            if atual.control_id() in (1001, 1148):
+                candidatos.append(campo)
+                break
+            atual = atual.parent()
+    if len(candidatos) == 1:
+        return candidatos[0]
+    controles = [(c.class_name(), c.control_id()) for c in dialogo.descendants()]
+    log.warning("Salvar Como: classes e IDs dos controles: %s", controles)
+    raise RuntimeError("Nao foi possivel identificar com seguranca a caixa Nome do arquivo em Salvar Como.")
+
+
+def _preencher_nome_arquivo(dialogo, destino):
+    campo = _campo_nome_arquivo(dialogo)
+    campo.set_edit_text(destino)
+    digitado = campo.window_text()
+    if os.path.normcase(digitado.strip()) != os.path.normcase(destino):
+        raise RuntimeError("A caixa Nome do arquivo nao confirmou o caminho informado.")
+    log.info("  campo Nome preenchido e confirmado: %s", destino)
+    return campo
 
 
 def _escrever(ctrl, texto):
@@ -474,23 +504,7 @@ def _exportar_xlsx(janela, destino):
     dlg = _abrir_dialogo(janela, {"native_title_re": r"(?i)XLSX"},
                          {"native_title_re": r"(?i)salvar como|save as"})
     log.info("  janela Salvar Como confirmada")
-    nome = dlg.child_window(control_id=1001)
-    _escrever(nome, destino)
-    _teclas(nome, "{TAB}")
-    time.sleep(0.5)
-    # window_text() devolve o rótulo ("Nome:"), não o conteúdo: lê o valor do campo
-    digitado = ""
-    for ler in (lambda: nome.get_value(), lambda: nome.iface_value.CurrentValue,
-                lambda: nome.legacy_properties().get("Value")):
-        try:
-            digitado = ler() or ""
-            if digitado:
-                break
-        except Exception:
-            pass
-    log.info("  campo Nome: %r", digitado)
-    if digitado and os.path.normcase(digitado.strip()) != os.path.normcase(destino):
-        raise RuntimeError(f"Não consegui preencher o nome na janela Salvar Como (ficou {digitado!r}).")
+    nome = _preencher_nome_arquivo(dlg, destino)
     log.info("  clicando em Salvar")
     ButtonWrapper(dlg.child_window(title_re=r"(?i)^&?salvar$|^&?save$").wrapper_object().handle).click()
 
@@ -557,13 +571,20 @@ def gerar_estoque(empresa="", modulo="", nome_arquivo="") -> str:
             time.sleep(1.5)
         raise TimeoutError(f"O arquivo não apareceu em {destino}.")
     finally:
+        if sys.exc_info()[0] is not None:
+            log.warning("Automacao interrompida; mantendo a tela aberta para diagnostico, sem tentar fechar menus/modais.")
+        else:
+            _limpar_apos_relatorio(janela, fomos_nos)
+
+
+def _limpar_apos_relatorio(janela, fomos_nos):
+    try:
+        _fechar_relatorio(janela)
+    except Exception:
+        log.warning("Falha na limpeza do relatorio; preservando o erro original.", exc_info=True)
+    if fomos_nos:  # só fecha o sistema se foi o robô que abriu
+        log.info("5/5 saindo do DevMaster")
         try:
-            _fechar_relatorio(janela)
+            _sair_do_sistema(janela)
         except Exception:
-            log.warning("Falha na limpeza do relatorio; preservando o erro original.", exc_info=True)
-        if fomos_nos:  # só fecha o sistema se foi o robô que abriu
-            log.info("5/5 saindo do DevMaster")
-            try:
-                _sair_do_sistema(janela)
-            except Exception:
-                log.exception("Não consegui sair do DevMaster")
+            log.exception("Não consegui sair do DevMaster")

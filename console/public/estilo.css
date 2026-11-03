@@ -1,5 +1,7 @@
 /* Estrutura e componentes: Greta. Identidade de cores e imagens: Troven. */
-@font-face { font-family: Geist; src: url('/fonts/geist-latin-wght-normal.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: Inter; src: url('/fonts/inter-400.ttf') format('truetype'); font-weight: 400; font-display: swap; }
+@font-face { font-family: Inter; src: url('/fonts/inter-600.ttf') format('truetype'); font-weight: 600 700; font-display: swap; }
+@font-face { font-family: Unbounded; src: url('/fonts/unbounded-600.ttf') format('truetype'); font-weight: 600; font-display: swap; }
 @font-face { font-family: 'Open Sans'; src: url('/fonts/open-sans-400.ttf') format('truetype'); font-weight: 400; font-display: swap; }
 @font-face { font-family: 'Open Sans'; src: url('/fonts/open-sans-600.ttf') format('truetype'); font-weight: 600; font-display: swap; }
 :root {
@@ -365,4 +367,69 @@ main, .card, td, .estado-vazio, .perfil-dados, .chave { overflow-wrap: anywhere;
 }
 @media (max-width: 767px) {
   .tabela-responsiva td .linha > .fixo { flex: 1 1 100%; }
+}
+
+/* ---- Padrão do Sistema Troven: fundo branco, menu lateral claro, cantos de 10px,
+   títulos em Unbounded, texto em Inter e botão principal em noite. */
+:root { --fonte-ui: Inter, system-ui, sans-serif; --fonte-titulo: Unbounded, system-ui, sans-serif; --lateral: 256px; }
+body { background: white; font: 400 15px/1.5 var(--fonte-ui); }
+h1, h2, h3 { font-family: var(--fonte-titulo); font-weight: 600; letter-spacing: -.045em; }
+h1 { font-size: 24px; } h2 { font-size: 16px; } h3 { font-size: 14px; }
+.sobre { font-size: 13px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; }
+.numero b { font-family: var(--fonte-titulo); letter-spacing: -.045em; }
+main { max-width: 1280px; padding: 32px 40px 64px; }
+.card, .numero, .comandos, .empresas-lista { border-radius: 16px; }
+.card { padding: 24px; }
+label { font-size: 13px; line-height: 18px; margin-bottom: 6px; }
+input:not([type=checkbox]), select, textarea, .select-trigger { height: 44px; padding: 10px 14px; border-color: var(--linha); border-radius: 10px; font-size: 15px; box-shadow: none; }
+textarea { height: auto; }
+input:not([type=checkbox]):hover, select:hover, textarea:hover, .select-trigger:hover { border-color: var(--nevoa); box-shadow: none; }
+input:not([type=checkbox]):focus, select:focus, textarea:focus, .select-trigger:focus-visible, .select-trigger[aria-expanded=true] { border-color: var(--cobalto); background: white; box-shadow: 0 0 0 4px #2B35F01A; }
+button, a.btn, .btn.mini { height: 44px; padding: 0 16px; border-radius: 10px; font: 600 15px var(--fonte-ui); }
+.btn.mini { height: 36px; padding: 0 12px; font-size: 13px; }
+.btn { background: var(--noite); color: white; box-shadow: none; }
+.btn:hover { background: var(--noite-2); box-shadow: none; }
+.btn.sec { background: transparent; color: var(--noite); }
+.btn.sec:hover, a.btn.sec:hover { background: #E4E1DA99; }
+a.btn.sec { border-color: transparent; }
+.btn.perigo { background: transparent; color: #DC2626; }
+.btn.perigo:hover { background: #FEF2F2; }
+.select-opcoes { border-color: var(--linha); border-radius: 10px; }
+.select-opcao { font-size: 14px; }
+th { background: var(--papel); font-size: 11px; letter-spacing: .04em; }
+td { font-size: 14px; }
+.janela { border-radius: 24px; }
+.sheet { border-radius: 0; }
+.sheet-topo { background: white; }
+.selo { border-radius: 999px; font-size: 12px; }
+.empresas-tabela th, .comandos-cab { background: var(--papel); }
+.empresas-paginacao { background: var(--papel); }
+.empresas-busca input { border-radius: 999px; background: #F7F5F199; box-shadow: none; font-size: 15px; }
+.barra-fixa, .empresas-selecao { border-radius: 16px; }
+.estado-vazio-icone { background: var(--papel); }
+
+/* Menu lateral claro com item ativo em papel e ícone/destaque cobalto */
+.lateral { padding: 20px; background: white; color: var(--noite); border-right: 1px solid var(--linha); }
+.lateral-marca { padding: 0 0 24px; }
+.lateral-marca img { height: 24px; }
+.lateral nav { gap: 2px; }
+.lateral nav a { height: auto; padding: 10px 12px; border: 1px solid transparent; border-radius: 10px; color: var(--grafite); font-size: 15px; }
+.lateral nav a:hover { background: var(--papel); color: var(--noite); }
+.lateral nav a.ativo { border-color: var(--linha); background: var(--papel); color: var(--noite); font-weight: 600; }
+.perfil { border-top-color: var(--linha); padding: 16px 0 0; }
+.avatar { background: var(--noite); color: white; font-family: var(--fonte-titulo); }
+.perfil-dados b { font-size: 14px; font-weight: 500; }
+.perfil-dados span { color: var(--grafite); }
+.perfil-sair { color: var(--grafite); }
+.perfil-sair:hover { background: var(--papel); color: var(--noite); }
+.vivo { color: var(--grafite); } .vivo.ligado { color: var(--ok); } .vivo.ligado::before { background: var(--ok); }
+.instalar-app { background: var(--papel); color: var(--noite); }
+.login form { border-radius: 24px; }
+@media (min-width: 768px) and (max-width: 1100px) { :root { --lateral: 220px; } }
+@media (max-width: 767px) {
+  :root { --lateral: 0px; }
+  main { padding: 20px 16px calc(180px + env(safe-area-inset-bottom)); }
+  .lateral { padding: calc(12px + env(safe-area-inset-top)) 16px 0; border-right: 0; border-bottom: 1px solid var(--linha); }
+  .lateral nav a { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; }
+  .lateral nav a.ativo { border-bottom-color: var(--cobalto); background: transparent; }
 }
