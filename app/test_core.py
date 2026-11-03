@@ -91,6 +91,32 @@ class TestComandos(Base):
 
 
 class TestDevMaster(unittest.TestCase):
+    def test_favorito_nao_abre_apenas_selecionando_card(self):
+        card = mock.Mock()
+        card.invoke.side_effect = RuntimeError("sem invoke")
+        devmaster._ativar_favorito(card)
+        card.iface_legacy_iaccessible.DoDefaultAction.assert_called_once()
+        card.iface_selection_item.Select.assert_not_called()
+
+    def test_favorito_sem_filtros_tenta_menu(self):
+        janela = mock.Mock()
+        with mock.patch.object(devmaster, "_aguardar_filtros", side_effect=[False, False, True]), \
+             mock.patch.object(devmaster, "_achar", return_value=mock.Mock()), \
+             mock.patch.object(devmaster, "_clicar"), \
+             mock.patch.object(devmaster, "_ativar_favorito"), \
+             mock.patch.object(devmaster, "_clicar_menu") as menu:
+            devmaster._abrir_relatorio(janela)
+        self.assertEqual(menu.call_count, 2)
+
+    def test_relatorio_nao_confirmado_nao_avanca_para_filtros(self):
+        with mock.patch.object(devmaster, "_aguardar_filtros", return_value=False), \
+             mock.patch.object(devmaster, "_achar", return_value=mock.Mock()), \
+             mock.patch.object(devmaster, "_clicar"), \
+             mock.patch.object(devmaster, "_ativar_favorito"), \
+             mock.patch.object(devmaster, "_clicar_menu"):
+            with self.assertRaisesRegex(RuntimeError, "nao abriu"):
+                devmaster._abrir_relatorio(mock.Mock())
+
     def test_clique_uia_nao_usa_cursor(self):
         controle = mock.Mock()
         devmaster._clicar(controle)

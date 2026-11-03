@@ -318,21 +318,49 @@ def _clicar_menu(janela, nome):
     time.sleep(0.8)
 
 
+def _aguardar_filtros(janela, timeout=8):
+    """O clique so terminou quando o campo especifico do relatorio apareceu."""
+    try:
+        _achar(janela, timeout=timeout, auto_id="edit_nome_layout", control_type="ComboBox")
+        return True
+    except RuntimeError:
+        return False
+
+
+def _ativar_favorito(card):
+    # SelectionItem.Select apenas seleciona o card; nao abre o relatorio.
+    for acao in (lambda: card.invoke(), lambda: card.iface_legacy_iaccessible.DoDefaultAction()):
+        try:
+            acao()
+            return
+        except Exception:
+            pass
+    raise RuntimeError("Favorito nao oferece acao de abertura sem mouse.")
+
+
 def _abrir_relatorio(janela):
-    """Abre o relatório pelo card em Favoritos (aba Menu). Se não achar o card,
-    cai no caminho Estoque > Relatórios, entrando no submenu pelo teclado (os itens
-    do submenu Relatórios não aparecem para a automação)."""
+    if _aguardar_filtros(janela, timeout=1):
+        return
     try:
         _clicar(_achar(janela, timeout=3, title="Menu", control_type="TabItem"))
-        time.sleep(1)
-        card = _achar(janela, timeout=8, title_re=r"^" + re.escape(MENU_SALDO) + r",.*",
-                      control_type="ListItem")
-        _clicar(card)
+        card = _achar(janela, timeout=5, title_re=r"^" + re.escape(MENU_SALDO) + r"(?:,.*)?$", control_type="ListItem")
+        _ativar_favorito(card)
+        if _aguardar_filtros(janela):
+            log.info("  filtros do relatorio confirmados via Favoritos")
+            return
+        log.warning("Favorito acionado, mas filtros nao apareceram; tentando menu Estoque.")
+    except RuntimeError as erro:
+        log.info("  tentando abrir pelo menu Estoque: %s", erro)
+    _clicar_menu(janela, MENU_ESTOQUE)
+    _clicar_menu(janela, MENU_RELATORIOS)
+    try:
+        item = _achar(janela, timeout=3, title_re=_regex_texto(MENU_SALDO))
+        _clicar(item)
     except RuntimeError:
-        _clicar_menu(janela, MENU_ESTOQUE)
-        _clicar_menu(janela, MENU_RELATORIOS)
         _teclas(_achar(janela, control_type="Menu"), "{RIGHT}{DOWN %d}{ENTER}" % (POSICAO_SALDO - 1))
-    time.sleep(1)
+    if not _aguardar_filtros(janela, timeout=15):
+        raise RuntimeError("O relatorio Saldos em Estoque - Colunas nao abriu: campo Nome Layout ausente. Capture os controles em Inspecionar com o menu/relatorio aberto.")
+    log.info("  filtros do relatorio confirmados via menu Estoque")
 
 
 def _valor_combo(combo):
@@ -352,7 +380,7 @@ def _preencher_filtros(janela):
     # A tela de filtros é uma janela filha da principal (auto_id "ucForm"), não uma
     # janela de nível superior, e os campos têm auto_id próprio.
     filtros = janela.child_window(auto_id="ucForm", control_type="Window")
-    filtros.wait("visible", timeout=TIMEOUT)
+    filtros.wait("exists", timeout=15)
 
     # Nome Layout: se já está em "Geral" não mexe; senão abre a lista e escolhe
     combo = filtros.child_window(auto_id="edit_nome_layout", control_type="ComboBox")
