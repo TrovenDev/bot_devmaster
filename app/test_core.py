@@ -91,6 +91,25 @@ class TestComandos(Base):
 
 
 class TestDevMaster(unittest.TestCase):
+    def test_nome_arquivo_resolve_edit_dentro_do_host(self):
+        dialogo = mock.Mock(handle=1)
+        host = mock.Mock(handle=2)
+        host.control_id.return_value = 1001
+        campo = mock.Mock(handle=3)
+        campo.control_id.return_value = 0
+        campo.parent.return_value = host
+        campo.window_text.return_value = "C:/Downloads/Estoque.xlsx"
+        dialogo.descendants.return_value = [campo]
+        self.assertIs(devmaster._preencher_nome_arquivo(dialogo, "C:/Downloads/Estoque.xlsx"), campo)
+        campo.set_edit_text.assert_called_once_with("C:/Downloads/Estoque.xlsx")
+
+    def test_nome_arquivo_nao_aceita_preenchimento_sem_confirmacao(self):
+        campo = mock.Mock()
+        campo.window_text.return_value = "nome antigo.xlsx"
+        with mock.patch.object(devmaster, "_campo_nome_arquivo", return_value=campo):
+            with self.assertRaisesRegex(RuntimeError, "nao confirmou"):
+                devmaster._preencher_nome_arquivo(mock.Mock(), "C:/Downloads/Estoque.xlsx")
+
     def test_modal_nativo_e_localizado_sem_busca_uia(self):
         modal = mock.Mock()
         with mock.patch.object(devmaster, "_dialogo_nativo", return_value=modal), \
