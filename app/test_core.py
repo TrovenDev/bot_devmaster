@@ -91,6 +91,23 @@ class TestComandos(Base):
 
 
 class TestDevMaster(unittest.TestCase):
+    def test_pid_em_cache_nao_resolve_janela_principal_modal(self):
+        from types import SimpleNamespace
+        janela = SimpleNamespace(_devmaster_pid=123, process_id=mock.Mock(side_effect=RuntimeError("janela indisponivel")))
+        self.assertEqual(devmaster._processo(janela), 123)
+        janela.process_id.assert_not_called()
+
+    def test_falha_de_limpeza_nao_esconde_erro_de_exportacao(self):
+        with tempfile.TemporaryDirectory() as pasta, \
+             mock.patch.object(devmaster, "PASTA_SAIDA", pasta), \
+             mock.patch.object(devmaster, "_abrir_sistema", return_value=(mock.Mock(), False)), \
+             mock.patch.object(devmaster, "_abrir_relatorio"), \
+             mock.patch.object(devmaster, "_preencher_filtros"), \
+             mock.patch.object(devmaster, "_exportar_xlsx", side_effect=RuntimeError("erro original XLSX")), \
+             mock.patch.object(devmaster, "_fechar_relatorio", side_effect=RuntimeError("erro limpeza")):
+            with self.assertRaisesRegex(RuntimeError, "erro original XLSX"):
+                devmaster.gerar_estoque()
+
     def test_modal_aparece_antes_de_invoke_retornar(self):
         import threading
         acionado = threading.Event()

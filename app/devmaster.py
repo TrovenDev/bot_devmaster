@@ -45,9 +45,16 @@ def _desktop():
 def _conectar():
     app = Application(backend="uia").connect(title_re=JANELA_PRINCIPAL, timeout=15)
     janela = app.window(title_re=JANELA_PRINCIPAL)
+    janela._devmaster_pid = app.process
     if janela.is_minimized():
         janela.restore()
     return janela
+
+
+def _processo(janela):
+    if isinstance(janela, int):
+        return janela
+    return vars(janela).get("_devmaster_pid") or janela.process_id()
 
 
 def _achar(janela, timeout=10, **criterios):
@@ -55,7 +62,7 @@ def _achar(janela, timeout=10, **criterios):
     suspensos, diálogos e a janela principal são janelas separadas). `janela` pode
     ser uma janela ou o número do processo (pid)."""
     criterios.setdefault("found_index", 0)  # se houver vários iguais, pega o primeiro
-    pid = janela if isinstance(janela, int) else janela.process_id()
+    pid = _processo(janela)
     d = _desktop()
     fim = time.time() + timeout
     while time.time() < fim:
@@ -96,13 +103,14 @@ def _clicar(ctrl):
 
 def _abrir_dialogo(janela, origem, destino, timeout=20):
     """Invoke pode esperar o fechamento do modal: nunca bloquear quem deve confirma-lo."""
+    pid = _processo(janela)
     falhas = queue.Queue()
     def acionar():
         import pythoncom
         pythoncom.CoInitializeEx(pythoncom.COINIT_MULTITHREADED)
         try:
             # Resolver o controle na propria thread evita reutilizar interfaces COM de outra thread.
-            _clicar(_achar(janela, timeout=5, **origem))
+            _clicar(_achar(pid, timeout=5, **origem))
         except Exception as erro:
             falhas.put(erro)
         finally:
@@ -111,7 +119,7 @@ def _abrir_dialogo(janela, origem, destino, timeout=20):
     fim = time.monotonic() + timeout
     while time.monotonic() < fim:
         try:
-            return _achar(janela, timeout=1, **destino)
+            return _achar(pid, timeout=1, **destino)
         except RuntimeError:
             if not falhas.empty():
                 raise RuntimeError("Falha ao abrir a proxima janela do relatorio.") from falhas.get()
@@ -533,7 +541,10 @@ def gerar_estoque(empresa="", modulo="", nome_arquivo="") -> str:
             time.sleep(1.5)
         raise TimeoutError(f"O arquivo não apareceu em {destino}.")
     finally:
-        _fechar_relatorio(janela)
+        try:
+            _fechar_relatorio(janela)
+        except Exception:
+            log.warning("Falha na limpeza do relatorio; preservando o erro original.", exc_info=True)
         if fomos_nos:  # só fecha o sistema se foi o robô que abriu
             log.info("5/5 saindo do DevMaster")
             try:
