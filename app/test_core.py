@@ -91,6 +91,31 @@ class TestComandos(Base):
 
 
 class TestDevMaster(unittest.TestCase):
+    def test_modal_aparece_antes_de_invoke_retornar(self):
+        import threading
+        acionado = threading.Event()
+        liberar = threading.Event()
+        terminou = threading.Event()
+        origem, destino = object(), object()
+        def achar(janela, **criterios):
+            if criterios.get("title") == "XLSX":
+                return origem
+            self.assertTrue(acionado.wait(2))
+            return destino
+        def clicar(controle):
+            acionado.set()
+            liberar.wait(3)
+            terminou.set()
+        try:
+            with mock.patch.object(devmaster, "_achar", side_effect=achar), \
+                 mock.patch.object(devmaster, "_clicar", side_effect=clicar):
+                resultado = devmaster._abrir_dialogo(123, {"title": "XLSX"}, {"auto_id": "btnOK"})
+                self.assertIs(resultado, destino)
+                self.assertFalse(terminou.is_set())
+        finally:
+            liberar.set()
+            self.assertTrue(terminou.wait(2))
+
     def test_favorito_nao_abre_apenas_selecionando_card(self):
         card = mock.Mock()
         card.invoke.side_effect = RuntimeError("sem invoke")

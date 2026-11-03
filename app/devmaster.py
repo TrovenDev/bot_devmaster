@@ -12,6 +12,8 @@ import logging
 import os
 import re
 import time
+import threading
+import queue
 
 from pywinauto import Application, Desktop
 from pywinauto.controls.hwndwrapper import HwndWrapper
@@ -90,6 +92,30 @@ def _clicar(ctrl):
     except Exception:
         pass
     raise RuntimeError("Este controle nao oferece acao sem mouse. Capture a tela pela aba Inspecionar para ajustar a automacao.")
+
+
+def _abrir_dialogo(janela, origem, destino, timeout=20):
+    """Invoke pode esperar o fechamento do modal: nunca bloquear quem deve confirma-lo."""
+    falhas = queue.Queue()
+    def acionar():
+        import pythoncom
+        pythoncom.CoInitializeEx(pythoncom.COINIT_MULTITHREADED)
+        try:
+            # Resolver o controle na propria thread evita reutilizar interfaces COM de outra thread.
+            _clicar(_achar(janela, timeout=5, **origem))
+        except Exception as erro:
+            falhas.put(erro)
+        finally:
+            pythoncom.CoUninitialize()
+    threading.Thread(target=acionar, daemon=True).start()
+    fim = time.monotonic() + timeout
+    while time.monotonic() < fim:
+        try:
+            return _achar(janela, timeout=1, **destino)
+        except RuntimeError:
+            if not falhas.empty():
+                raise RuntimeError("Falha ao abrir a proxima janela do relatorio.") from falhas.get()
+    raise TimeoutError("A proxima janela do relatorio nao apareceu apos o acionamento.")
 
 
 def _escrever(ctrl, texto):
@@ -418,16 +444,12 @@ def _exportar_xlsx(janela, destino):
     time.sleep(0.6)
 
     log.info("  escolhendo %s", ITEM_EXPORTAR)
-    _clicar(_achar(janela, title=ITEM_EXPORTAR))
-    # Depois de escolher o formato abre "Opções de Exportação XLSX": OK (o Enter do
-    # passo a passo manual) antes de abrir a janela "Salvar Como".
-    log.info("  confirmando as opções de exportação (OK)")
-    _clicar(_achar(janela, timeout=15, auto_id="btnOK", control_type="Button"))
-
-    # Janela "Salvar Como": espera abrir, preenche o caminho completo no campo Nome
-    # (sobrepõe a pasta que ela abriu) e clica em Salvar.
-    log.info("  aguardando a janela Salvar Como")
-    dlg = _achar(janela, timeout=20, title_re=r"(?i)salvar como|save as", control_type="Window")
+    _abrir_dialogo(janela, {"title": ITEM_EXPORTAR},
+                   {"auto_id": "btnOK", "control_type": "Button"})
+    log.info("  confirmando as opcoes de exportacao (OK)")
+    dlg = _abrir_dialogo(janela, {"auto_id": "btnOK", "control_type": "Button"},
+                         {"title_re": r"(?i)salvar como|save as", "control_type": "Window"})
+    log.info("  janela Salvar Como confirmada")
     nome = dlg.child_window(auto_id="1001", control_type="Edit")
     _escrever(nome, destino)
     _teclas(nome, "{TAB}")
