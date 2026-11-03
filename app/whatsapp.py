@@ -26,6 +26,10 @@ class EvolutionErro(Exception):
     pass
 
 
+class ConexaoFechada(EvolutionErro):
+    """A instancia Evolution esta sem conexao ativa para envio."""
+
+
 class WhatsApp:
     def __init__(self, url: str, instancia: str, chave: str, formato_menu: str = "botoes"):
         self.url = url.rstrip("/")
@@ -47,7 +51,10 @@ class WhatsApp:
             with urllib.request.urlopen(req, timeout=60) as r:
                 return json.loads(r.read().decode("utf-8") or "{}")
         except urllib.error.HTTPError as e:
-            raise EvolutionErro(f"{e.code}: {e.read().decode('utf-8', 'replace')[:300]}")
+            detalhe = e.read().decode('utf-8', 'replace')[:300]
+            if "connection closed" in detalhe.lower():
+                raise ConexaoFechada("Conexao do WhatsApp fechada na Evolution API. Reconecte a instancia no painel da Evolution.") from None
+            raise EvolutionErro(f"{e.code}: {detalhe}") from None
         except Exception as e:
             raise EvolutionErro(str(e))
 
@@ -94,6 +101,8 @@ class WhatsApp:
                         }],
                     })
                 return
+            except ConexaoFechada:
+                raise
             except EvolutionErro as e:
                 log.warning("Botões/lista não aceitos pela API (%s); enviando menu em texto.", e)
         self.enviar_texto(numero, texto)
@@ -138,6 +147,8 @@ class WhatsApp:
             "where": {"key": {"fromMe": False}}, "page": 1, "offset": JANELA})
         recs = (dados.get("messages") or {}).get("records") or []
         novas = []
+        agora = int(time.time())
+        corte = agora - 3600
         for r in recs:
             key = r.get("key") or {}
             if key.get("fromMe"):
@@ -147,11 +158,11 @@ class WhatsApp:
                 continue  # ignora grupos e status
             ts = int(r.get("messageTimestamp") or 0)
             mid = key.get("id") or r.get("id")
-            if ts < self._inicio - 5 or mid in self._vistos:
+            if not mid or ts < max(self._inicio - 5, corte) or mid in self._vistos:
                 continue
-            self._vistos[mid] = ts
+            self._vistos[mid] = agora
             novas.append(r)
-        corte = int(time.time()) - 3600  # esquece ids antigos
+        # Mensagens anteriores ao corte nunca voltam a entrar, mesmo apos limpar os IDs.
         for k in [k for k, t in self._vistos.items() if t < corte]:
             del self._vistos[k]
         return sorted(novas, key=lambda r: int(r.get("messageTimestamp") or 0))
@@ -184,6 +195,8 @@ class WhatsApp:
             arquivo = comandos.executar(nome, canal="whatsapp", solicitante=f"…{quem}")
             self.enviar_arquivo(numero, arquivo, cmd.mimetype, cmd.titulo)
             log.info("WhatsApp: %s enviado para %s", os.path.basename(arquivo), numero)
+        except ConexaoFechada as e:
+            log.warning("WhatsApp: %s Comando %s sem confirmacao de entrega; nao sera reenviado automaticamente.", e, nome)
         except comandos.Ocupado:
             self._avisar(numero, "Já tem uma tarefa rodando no DevMaster, aguarde e tente de novo.")
         except comandos.Desativado:
@@ -207,6 +220,8 @@ class WhatsApp:
                 for msg in self._buscar():
                     try:
                         self._tratar(msg)
+                    except ConexaoFechada as e:
+                        log.warning("WhatsApp: %s", e)
                     except Exception:
                         log.exception("Erro ao tratar mensagem do WhatsApp")
             except EvolutionErro as e:

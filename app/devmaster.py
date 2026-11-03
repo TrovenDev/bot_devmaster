@@ -13,8 +13,9 @@ import os
 import re
 import time
 
-from pywinauto import Application, Desktop, mouse
-from pywinauto.keyboard import send_keys
+from pywinauto import Application, Desktop
+from pywinauto.controls.hwndwrapper import HwndWrapper
+from pywinauto.controls.win32_controls import ButtonWrapper
 
 log = logging.getLogger("devmaster")
 
@@ -44,7 +45,6 @@ def _conectar():
     janela = app.window(title_re=JANELA_PRINCIPAL)
     if janela.is_minimized():
         janela.restore()
-    janela.set_focus()
     return janela
 
 
@@ -73,10 +73,44 @@ def _achar(janela, timeout=10, **criterios):
     raise RuntimeError(f"Controle não encontrado: {criterios}. Itens de menu visíveis: {vistos}")
 
 
-def _digitar(texto):
-    """Digita no campo em foco (escapa os caracteres especiais do send_keys)."""
-    send_keys("".join("{" + ch + "}" if ch in "+^%~(){}[]" else ch for ch in texto),
-              with_spaces=True, pause=0.02)
+def _clicar(ctrl):
+    """Aciona o controle sem cursor e sem alterar o foco global."""
+    for acao in (lambda: ctrl.invoke(), lambda: ctrl.iface_selection_item.Select(),
+                 lambda: ctrl.iface_toggle.Toggle(), lambda: ctrl.iface_expand_collapse.Expand(),
+                 lambda: ctrl.iface_legacy_iaccessible.DoDefaultAction()):
+        try:
+            acao()
+            return
+        except Exception:
+            pass
+    try:
+        if ctrl.element_info.control_type == "Button" and ctrl.handle:
+            ButtonWrapper(ctrl.handle).click()
+            return
+    except Exception:
+        pass
+    raise RuntimeError("Este controle nao oferece acao sem mouse. Capture a tela pela aba Inspecionar para ajustar a automacao.")
+
+
+def _escrever(ctrl, texto):
+    """Preenche pelo ValuePattern, sem teclado global (inclusive senha)."""
+    for acao in (lambda: ctrl.iface_value.SetValue(str(texto)), lambda: ctrl.set_edit_text(str(texto))):
+        try:
+            acao()
+            return
+        except Exception:
+            pass
+    raise RuntimeError("Campo sem suporte a preenchimento direto; requer ajuste pela aba Inspecionar.")
+
+
+def _teclas(ctrl, teclas):
+    """Envia mensagens de teclado apenas ao HWND alvo, sem SendInput/foco."""
+    try:
+        if not ctrl.handle:
+            raise ValueError("Controle sem HWND")
+        HwndWrapper(ctrl.handle).send_keystrokes(teclas)
+    except Exception as erro:
+        raise RuntimeError("Controle nao aceita teclas em segundo plano; requer ajuste pela aba Inspecionar.") from erro
 
 
 def _pid_devmaster():
@@ -174,14 +208,13 @@ def _selecionar_combo(pid, auto_id, desejado):
     if desejado.lower() in _valor_combo(combo).lower():
         return
     log.info("  selecionando %r (%s)", desejado, auto_id)
-    combo.click_input()
+    _clicar(combo)
     time.sleep(0.6)
     try:
-        _achar(pid, timeout=3, title=desejado).click_input()  # opção da lista aberta
+        _clicar(_achar(pid, timeout=3, title=desejado))  # opção da lista aberta
     except RuntimeError:
-        send_keys("^a")  # lista não exposta: digita o nome e confirma
-        _digitar(desejado)
-        send_keys("{ENTER}")
+        _escrever(combo, desejado)
+        _teclas(combo, "{ENTER}")
     time.sleep(0.5)
     if desejado.lower() not in _valor_combo(combo).lower():
         log.warning("  não consegui confirmar a seleção de %r; seguindo com o valor atual.", desejado)
@@ -212,18 +245,14 @@ def _login(pid, empresa="", modulo=""):
             # usuário já vem preenchido é porque ficaram marcados na vez anterior: clica
             # para desmarcar. (Sem usuário preenchido já estão desmarcados.)
             marcado = bool(_valor(campo_usuario).strip())
-            campo_usuario.click_input()
-            send_keys("^a{BACKSPACE}")
-            _digitar(usuario)
+            _escrever(campo_usuario, usuario)
             campo_senha = _achar(pid, timeout=5, auto_id="textSenha", control_type="Edit")
-            campo_senha.click_input()
-            send_keys("^a{BACKSPACE}")
-            _digitar(senha)
+            _escrever(campo_senha, senha)
             if marcado:
                 for caixa in ("pictureBoxLembrarMe", "pictureBoxSalvarSenha"):
-                    _achar(pid, timeout=5, auto_id=caixa).click_input()
+                    _clicar(_achar(pid, timeout=5, auto_id=caixa))
                 log.info("  desmarcou Lembrar-me e Salvar minha senha")
-            _achar(pid, timeout=10, auto_id="btnAvancar", control_type="Button").click_input()
+            _clicar(_achar(pid, timeout=10, auto_id="btnAvancar", control_type="Button"))
             tela1_feita = True
             time.sleep(2)
         elif campo_usuario is None:
@@ -231,7 +260,7 @@ def _login(pid, empresa="", modulo=""):
                 botao = _achar(pid, timeout=2, auto_id="btnAvancar", control_type="Button")
                 _selecionar_combo(pid, "lookUpEditEmpresa", empresa)
                 _selecionar_combo(pid, "lookUpEditModulo", modulo)
-                botao.click_input()
+                _clicar(botao)
                 log.info("  tela de login: empresa e módulo confirmados")
                 time.sleep(3)
             except RuntimeError:
@@ -269,10 +298,10 @@ def _sair_do_sistema(janela):
     # Os itens do menu Programa aparecem como botões dentro de um "Menu" suspenso
     # (não como MenuItem); busca o "Sair" dentro dele para não pegar o Sair do relatório.
     menu = _achar(pid, timeout=5, control_type="Menu")
-    menu.child_window(title="Sair", control_type="Button").click_input()
+    _clicar(menu.child_window(title="Sair", control_type="Button"))
     log.info("  Programa > Sair")
     try:
-        _achar(pid, timeout=5, title_re=r"(?i)^&?sim$", control_type="Button").click_input()
+        _clicar(_achar(pid, timeout=5, title_re=r"(?i)^&?sim$", control_type="Button"))
         log.info("  confirmou o aviso de abas abertas (Sim)")
     except Exception:
         pass  # sem aviso: o sistema já saiu
@@ -285,7 +314,7 @@ def _regex_texto(nome):
 
 
 def _clicar_menu(janela, nome):
-    _achar(janela, title_re=_regex_texto(nome), control_type="MenuItem").click_input()
+    _clicar(_achar(janela, title_re=_regex_texto(nome), control_type="MenuItem"))
     time.sleep(0.8)
 
 
@@ -294,15 +323,15 @@ def _abrir_relatorio(janela):
     cai no caminho Estoque > Relatórios, entrando no submenu pelo teclado (os itens
     do submenu Relatórios não aparecem para a automação)."""
     try:
-        _achar(janela, timeout=3, title="Menu", control_type="TabItem").click_input()
+        _clicar(_achar(janela, timeout=3, title="Menu", control_type="TabItem"))
         time.sleep(1)
         card = _achar(janela, timeout=8, title_re=r"^" + re.escape(MENU_SALDO) + r",.*",
                       control_type="ListItem")
-        card.click_input()
+        _clicar(card)
     except RuntimeError:
         _clicar_menu(janela, MENU_ESTOQUE)
         _clicar_menu(janela, MENU_RELATORIOS)
-        send_keys("{RIGHT}{DOWN %d}{ENTER}" % (POSICAO_SALDO - 1))
+        _teclas(_achar(janela, control_type="Menu"), "{RIGHT}{DOWN %d}{ENTER}" % (POSICAO_SALDO - 1))
     time.sleep(1)
 
 
@@ -328,20 +357,21 @@ def _preencher_filtros(janela):
     # Nome Layout: se já está em "Geral" não mexe; senão abre a lista e escolhe
     combo = filtros.child_window(auto_id="edit_nome_layout", control_type="ComboBox")
     if LAYOUT.lower() not in _valor_combo(combo).lower():
-        combo.click_input()
+        _clicar(combo)
         time.sleep(0.6)
         try:
-            _achar(janela, timeout=3, title=LAYOUT).click_input()
+            _clicar(_achar(janela, timeout=3, title=LAYOUT))
         except RuntimeError:
-            send_keys(LAYOUT + "{ENTER}")  # lista não exposta: digita o valor
+            _escrever(combo, LAYOUT)
+            _teclas(combo, "{ENTER}")
         time.sleep(0.4)
 
     # Tab. Preços: sempre 001 (seleciona tudo e digita por cima)
     preco = filtros.child_window(auto_id="edit_tab_preco", control_type="Edit")
-    preco.click_input()
-    send_keys("^a" + TAB_PRECOS + "{TAB}")
+    _escrever(preco, TAB_PRECOS)
+    _teclas(preco, "{TAB}")
 
-    filtros.child_window(title="Confirmar", control_type="Button").click_input()
+    _clicar(filtros.child_window(title="Confirmar", control_type="Button"))
     # Espera a tela de filtros fechar (o relatório começa a ser gerado)
     fim = time.time() + TIMEOUT
     while time.time() < fim and filtros.exists(timeout=0.5):
@@ -356,28 +386,23 @@ def _exportar_xlsx(janela, destino):
     log.info("  clicando na setinha de exportar")
     botao = _achar(janela, timeout=TIMEOUT, title="Exportar Relatório", control_type="SplitButton")
     # a setinha é o botão filho "Abrir" do SplitButton
-    botao.child_window(title="Abrir", control_type="Button").click_input()
+    _clicar(botao.child_window(title="Abrir", control_type="Button"))
     time.sleep(0.6)
 
     log.info("  escolhendo %s", ITEM_EXPORTAR)
-    _achar(janela, title=ITEM_EXPORTAR).click_input()
+    _clicar(_achar(janela, title=ITEM_EXPORTAR))
     # Depois de escolher o formato abre "Opções de Exportação XLSX": OK (o Enter do
     # passo a passo manual) antes de abrir a janela "Salvar Como".
     log.info("  confirmando as opções de exportação (OK)")
-    _achar(janela, timeout=15, auto_id="btnOK", control_type="Button").click_input()
+    _clicar(_achar(janela, timeout=15, auto_id="btnOK", control_type="Button"))
 
     # Janela "Salvar Como": espera abrir, preenche o caminho completo no campo Nome
     # (sobrepõe a pasta que ela abriu) e clica em Salvar.
     log.info("  aguardando a janela Salvar Como")
     dlg = _achar(janela, timeout=20, title_re=r"(?i)salvar como|save as", control_type="Window")
-    dlg.set_focus()
     nome = dlg.child_window(auto_id="1001", control_type="Edit")
-    # Digita pelo teclado: preencher o campo "por baixo" (set_edit_text) muda o texto
-    # mas a janela salva com o nome antigo (relEst901_G) na pasta que estava aberta.
-    nome.click_input()
-    send_keys("^a{BACKSPACE}")
-    escapado = "".join("{" + ch + "}" if ch in "+^%~(){}[]" else ch for ch in destino)
-    send_keys(escapado, with_spaces=True, pause=0.02)
+    _escrever(nome, destino)
+    _teclas(nome, "{TAB}")
     time.sleep(0.5)
     # window_text() devolve o rótulo ("Nome:"), não o conteúdo: lê o valor do campo
     digitado = ""
@@ -393,19 +418,19 @@ def _exportar_xlsx(janela, destino):
     if digitado and os.path.normcase(digitado.strip()) != os.path.normcase(destino):
         raise RuntimeError(f"Não consegui preencher o nome na janela Salvar Como (ficou {digitado!r}).")
     log.info("  clicando em Salvar")
-    dlg.child_window(title_re=r"(?i)^&?salvar$|^&?save$", control_type="Button").click_input()
+    _clicar(dlg.child_window(title_re=r"(?i)^&?salvar$|^&?save$", control_type="Button"))
 
     # Se o arquivo antigo não pôde ser apagado, o Windows pergunta se substitui: Sim
     try:
         aviso = _achar(janela, timeout=3, title_re=r"(?i)confirmar|confirm", control_type="Window")
-        aviso.child_window(title_re=r"(?i)^&?(sim|yes)$", control_type="Button").click_input()
+        _clicar(aviso.child_window(title_re=r"(?i)^&?(sim|yes)$", control_type="Button"))
     except RuntimeError:
         pass
 
     # Depois de salvar o DevMaster pergunta "Você quer abrir este arquivo?": Não
     try:
         aviso = _achar(janela, timeout=30, title="Exportar", control_type="Window")
-        aviso.child_window(title="Não", control_type="Button").click_input()
+        _clicar(aviso.child_window(title="Não", control_type="Button"))
         log.info("  respondeu Não a 'Você quer abrir este arquivo?'")
     except RuntimeError:
         log.warning("  janela 'Você quer abrir este arquivo?' não encontrada")
@@ -414,7 +439,7 @@ def _exportar_xlsx(janela, destino):
 def _fechar_relatorio(janela):
     """Fecha o relatório (botão vermelho 'Sair' da barra), para não acumular abas."""
     try:
-        _achar(janela, timeout=5, title="Sair", control_type="Button").click_input()
+        _clicar(_achar(janela, timeout=5, title="Sair", control_type="Button"))
         log.info("relatório fechado")
     except RuntimeError:
         log.warning("botão Sair (fechar relatório) não encontrado")

@@ -62,7 +62,8 @@ class Gestao:
         except Exception as e:
             self._usar_cache(f"sem conexão ({type(e).__name__})")
             return
-        mudou = CONFIG.remota != dados
+        anterior = {k: v for k, v in (CONFIG.remota or {}).items() if k != "gerado_em"}
+        mudou = anterior != {k: v for k, v in dados.items() if k != "gerado_em"}
         CONFIG.definir_remota(dados)
         if mudou:
             log.info("Permissoes sincronizadas: WhatsApp %d numeros; Telegram %d IDs.",

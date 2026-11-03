@@ -91,6 +91,32 @@ class TestComandos(Base):
 
 
 class TestDevMaster(unittest.TestCase):
+    def test_clique_uia_nao_usa_cursor(self):
+        controle = mock.Mock()
+        devmaster._clicar(controle)
+        controle.invoke.assert_called_once()
+        controle.click_input.assert_not_called()
+        controle.set_focus.assert_not_called()
+
+    def test_preenchimento_direto_sem_foco(self):
+        controle = mock.Mock()
+        devmaster._escrever(controle, "senha com espacos ")
+        controle.iface_value.SetValue.assert_called_once_with("senha com espacos ")
+        controle.set_focus.assert_not_called()
+
+    def test_controle_sem_acao_nao_simula_sucesso_por_foco(self):
+        from types import SimpleNamespace
+        controle = SimpleNamespace()
+        with self.assertRaises(RuntimeError):
+            devmaster._clicar(controle)
+
+    def test_teclas_sao_enviadas_apenas_ao_hwnd_alvo(self):
+        from types import SimpleNamespace
+        with mock.patch.object(devmaster, "HwndWrapper") as wrapper:
+            devmaster._teclas(SimpleNamespace(handle=123), "{TAB}")
+        wrapper.assert_called_once_with(123)
+        wrapper.return_value.send_keystrokes.assert_called_once_with("{TAB}")
+
     def test_busca_atalho_ignora_o_bot_e_prefere_devmaster(self):
         with tempfile.TemporaryDirectory() as d:
             for nome in ("Bot DevMaster.lnk", "DevMasterBot.exe", "DevMaster Business.lnk", "DevMaster.lnk"):
@@ -113,6 +139,42 @@ class TestDevMaster(unittest.TestCase):
 
 
 class TestWhatsApp(Base):
+    def test_polling_nao_reprocessa_mensagem_apos_uma_hora(self):
+        bot = whatsapp.WhatsApp("https://evolution", "instancia", "chave")
+        bot._inicio = 1000
+        mensagem = {"key": {"id": "msg1", "remoteJid": "5511999998888@s.whatsapp.net"}, "messageTimestamp": 1001}
+        with mock.patch.object(bot, "_chamar", return_value={"messages": {"records": [mensagem]}}):
+            with mock.patch.object(whatsapp.time, "time", return_value=1002):
+                self.assertEqual(len(bot._buscar()), 1)
+            with mock.patch.object(whatsapp.time, "time", return_value=5000):
+                self.assertEqual(bot._buscar(), [])
+                self.assertEqual(bot._buscar(), [])
+
+    def test_conexao_fechada_nao_tenta_avisar_no_canal_desconectado(self):
+        bot = whatsapp.WhatsApp("https://evolution", "instancia", "chave")
+        with mock.patch.object(bot, "enviar_texto", side_effect=whatsapp.ConexaoFechada("Connection Closed")) as enviar, \
+             mock.patch.object(bot, "_avisar") as avisar, \
+             mock.patch.object(whatsapp.comandos, "executar") as executar:
+            bot._rodar("5511999998888", "estoque", "8888")
+        enviar.assert_called_once()
+        avisar.assert_not_called()
+        executar.assert_not_called()
+
+    def test_connection_closed_vira_erro_de_conexao(self):
+        import io
+        erro = urllib.error.HTTPError("https://evolution", 500, "erro", {}, io.BytesIO(b'{"response":{"message":"Connection Closed"}}'))
+        bot = whatsapp.WhatsApp("https://evolution", "instancia", "chave")
+        with mock.patch.object(whatsapp.urllib.request, "urlopen", side_effect=erro):
+            with self.assertRaises(whatsapp.ConexaoFechada):
+                bot.enviar_texto("5511999998888", "oi")
+
+    def test_menu_nao_repete_envio_quando_conexao_fechada(self):
+        bot = whatsapp.WhatsApp("https://evolution", "instancia", "chave")
+        with mock.patch.object(bot, "_chamar", side_effect=whatsapp.ConexaoFechada("Connection Closed")) as chamar:
+            with self.assertRaises(whatsapp.ConexaoFechada):
+                bot.enviar_menu("5511999998888")
+        chamar.assert_called_once()
+
     def test_assinatura_no_inicio_do_texto_e_legenda(self):
         bot = whatsapp.WhatsApp("https://evolution", "instancia", "chave", "texto")
         with mock.patch.object(bot, "_chamar") as chamar:
