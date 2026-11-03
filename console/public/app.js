@@ -216,6 +216,9 @@ function mostrarLogin(mensagem = "") {
   if (canalRealtime) { sb.removeChannel(canalRealtime); canalRealtime = null; }
   raiz.replaceChildren(
     h("div", { class: "login" },
+      h("aside", { class: "login-lado" },
+        h("img", { src: "/troven-horizontal-negativo.svg", alt: "Troven" }),
+        h("p", {}, "Software feito peça por peça. ", h("span", {}, "Até tudo se encaixar."))),
       h("form", {
         onsubmit: async (e) => {
           e.preventDefault();
@@ -226,7 +229,8 @@ function mostrarLogin(mensagem = "") {
           iniciar();
         },
       },
-        h("img", { src: "/troven-horizontal-negativo.svg", alt: "Troven" }),
+        h("img", { class: "login-logo", src: "/troven-horizontal-positivo.svg", alt: "Troven" }),
+        h("div", { class: "sobre" }, "Painel Troven"),
         h("h1", {}, "Gestão do Bot DevMaster"),
         h("p", {}, "Entre para gerenciar empresas, sistemas e chaves."),
         h("label", { for: "email" }, "E-mail"),

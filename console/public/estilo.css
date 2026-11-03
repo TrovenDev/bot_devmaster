@@ -433,3 +433,97 @@ td { font-size: 14px; }
   .lateral nav a { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; }
   .lateral nav a.ativo { border-bottom-color: var(--cobalto); background: transparent; }
 }
+
+/* ---- Fidelidade ao Sistema Troven: listas em linhas (sem tabelas cinzas), selos em pílula,
+   overline com a peça a 14°, login em duas colunas e avisos em caixas suaves. */
+.sobre { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: var(--grafite); }
+.sobre::before { content: ''; width: .55em; height: .55em; border-radius: 2px; background: var(--cobalto); transform: rotate(14deg); }
+h1 { font-size: 36px; line-height: 1.15; }
+.cabeca { align-items: flex-end; margin-bottom: 32px; }
+.card, .comandos, .empresas-lista { border-color: var(--linha); background: white; box-shadow: none; border-radius: 16px; }
+.numero { border-radius: 16px; }
+table { font-size: 15px; }
+th { height: auto; padding: 12px 20px; border: 0; border-bottom: 1px solid var(--linha); background: white; color: var(--grafite); font: 600 12px var(--fonte-ui); letter-spacing: .08em; text-transform: uppercase; }
+td { padding: 16px 20px; border-bottom: 1px solid var(--linha); font-size: 15px; }
+tbody tr:hover, tbody tr.clicavel:hover { background: var(--papel); }
+.empresas-tabela th, .comandos-cab { height: auto; padding: 12px 20px; background: white; border-bottom: 1px solid var(--linha); }
+.empresas-tabela .ordenar { height: auto; font: 600 12px var(--fonte-ui); letter-spacing: .08em; color: var(--grafite); }
+.empresas-tabela .ordenar:hover { background: transparent; color: var(--noite); }
+.empresas-tabela td { height: auto; padding: 16px 20px; border-bottom: 1px solid var(--linha); font-size: 15px; color: var(--noite); }
+.empresas-tabela td:nth-child(n+4) { color: var(--grafite); }
+.empresas-tabela tr.selecionada { background: var(--papel); }
+.empresas-tabela tbody tr:last-child td { border-bottom: 0; }
+.empresa-nome { font: 500 15px var(--fonte-ui); color: var(--noite); }
+.empresa-nome:hover { text-decoration: none; color: var(--cobalto); }
+.comando-linha { padding: 16px 20px; }
+.comando-linha + .comando-linha { border-top: 1px solid var(--linha); }
+.comandos-cab, .comando-linha { padding-inline: 20px; }
+.empresas-paginacao { padding: 16px 20px; background: white; border-top: 1px solid var(--linha); }
+.empresas-paginacao button, .empresas-paginacao nav > span { width: 32px; height: 32px; border-radius: 8px; font-size: 13px; }
+.empresas-paginacao button.atual { background: var(--noite); color: white; box-shadow: none; }
+.empresas-paginacao button:hover:not(:disabled) { background: var(--papel); color: var(--noite); }
+/* Selos em pílula: ativo = cobalto suave, erro = vermelho suave, neutro = linha */
+.selo { padding: 4px 10px; border-radius: 999px; background: var(--linha); color: var(--grafite); font: 600 12px var(--fonte-ui); }
+.selo::before { display: none; }
+.selo.online, .selo.ok { background: #2B35F01A; color: var(--cobalto); }
+.selo.erro { background: #FEF2F2; color: #B91C1C; }
+/* Caixa de seleção: quadrado noite com marca lima; interruptor cobalto com bolinha lima */
+input[type=checkbox] { flex: 0 0 20px; width: 20px; height: 20px; border: 1px solid var(--linha); border-radius: 6px; }
+input[type=checkbox]:hover { border-color: var(--nevoa); box-shadow: none; }
+input[type=checkbox]:checked, input[type=checkbox]:indeterminate { background: var(--noite); border-color: var(--noite); }
+input[type=checkbox]:checked::after { border-color: var(--lima); border-width: 0 0 3px 3px; width: 10px; height: 6px; }
+input[type=checkbox]:indeterminate::after { background: var(--lima); }
+input[type=checkbox]:focus-visible { outline: none; box-shadow: 0 0 0 4px #2B35F033; }
+input[type=checkbox].toggle { flex: 0 0 44px; width: 44px; height: 24px; margin: 0; border: 0; background: var(--linha); border-radius: 999px; }
+input[type=checkbox].toggle::after { top: 2px; left: 2px; width: 20px; height: 20px; border: 0; box-shadow: 0 1px 3px #0000002e; transition: transform .2s cubic-bezier(.34,1.4,.64,1), background .2s; }
+input[type=checkbox].toggle:checked { background: var(--cobalto); border: 0; }
+input[type=checkbox].toggle:checked::after { background: var(--lima); transform: translateX(20px); width: 20px; height: 20px; border: 0; }
+.marcar { font-size: 14px; }
+/* Lista de opções (Select) */
+.select-opcoes { top: calc(100% + 6px); padding: 4px; border-radius: 12px; box-shadow: 0 10px 30px #0F102026; }
+.select-opcao { min-height: 0; padding: 8px 12px; border-radius: 8px; background: transparent; font-size: 15px; }
+.select-opcao:hover, .select-opcao:focus-visible { background: var(--papel); }
+.select-opcao[aria-selected=true] { background: transparent; color: var(--noite); font-weight: 600; }
+.select-opcao[aria-selected=true]::after { color: var(--cobalto); }
+.select-trigger::after { color: var(--grafite); }
+/* Sheet lateral e diálogos */
+.fundo { background: #0F102080; }
+.sheet { width: 576px; max-width: 100%; box-shadow: 0 25px 50px -12px #00000040; }
+.sheet .sheet-topo { padding: 16px 24px; background: white; border-bottom: 1px solid var(--linha); }
+.sheet .sheet-topo h2 { margin: 0; font-size: 20px; }
+.sheet-topo button { width: 36px; min-width: 36px; height: 36px; border-radius: 10px; }
+.sheet-topo button:hover { background: #E4E1DA99; }
+.janela .acoes { border-top-color: var(--linha); }
+.janela.dialogo { max-width: 448px; border-radius: 24px; border: 1px solid var(--linha); }
+.dialogo .janela-corpo h2 { font-size: 18px; }
+.dialogo .janela-corpo p { font-size: 14px; }
+/* Avisos (toast) e estado vazio */
+#toast { top: calc(16px + env(safe-area-inset-top)); right: 16px; bottom: auto; left: auto; transform: none; width: min(384px, calc(100% - 32px)); padding: 12px; border: 1px solid #BBF7D0; border-radius: 12px; background: #F0FDF4; color: #166534; font-size: 14px; box-shadow: 0 10px 15px -3px #0000001a; }
+#toast.erro { border-color: #FECACA; background: #FEF2F2; color: #B91C1C; }
+.estado-vazio-icone { border-radius: 14px; }
+.chave code { border-radius: 10px; }
+/* Login em duas colunas */
+.login { display: grid; grid-template-columns: 1fr 1fr; place-items: stretch; min-height: 100dvh; padding: 0; background: white; }
+.login-lado { display: flex; flex-direction: column; justify-content: space-between; gap: 32px; padding: 48px; background: var(--cobalto); color: white; }
+.login-lado img { height: 28px; width: fit-content; }
+.login-lado p { max-width: 384px; margin: 0; font-size: 18px; color: #ffffffcc; }
+.login-lado p span { color: var(--lima); }
+.login form { align-self: center; justify-self: center; width: 100%; max-width: 384px; margin: 48px 16px; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--noite); }
+.login .login-logo { display: none; height: 28px; margin-bottom: 32px; }
+.login h1 { margin-bottom: 8px; font-size: 32px; }
+.login p { color: var(--grafite); }
+.login label { color: var(--noite); font-size: 14px; font-weight: 500; }
+.login input { margin-bottom: 20px; }
+.login .msg { color: #B91C1C; }
+.login:has(.aviso-vazio) { display: grid; place-items: center; background: var(--papel); }
+@media (max-width: 1023px) {
+  .login { grid-template-columns: 1fr; }
+  .login-lado { display: none; }
+  .login .login-logo { display: block; }
+}
+@media (max-width: 767px) {
+  h1 { font-size: 28px; }
+  th, td, .empresas-tabela td { padding: 8px 0; }
+  .sheet { width: 100%; }
+  .empresas-paginacao button, .empresas-paginacao nav > span { width: 40px; height: 44px; }
+}
