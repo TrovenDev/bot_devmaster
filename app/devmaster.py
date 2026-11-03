@@ -143,6 +143,16 @@ def _abrir_dialogo(janela, origem, destino, timeout=20):
     raise TimeoutError("A proxima janela do relatorio nao apareceu apos o acionamento.")
 
 
+def _salvar_dialogo(dialogo):
+    """IDOK=1 e o botao de confirmacao do dialogo comum, independente do idioma."""
+    import win32gui
+    botao = dialogo.child_window(control_id=1, class_name="Button").wrapper_object()
+    if not botao.is_enabled():
+        raise RuntimeError("O botao Salvar esta desabilitado. Confira o nome e a pasta de destino.")
+    # BM_CLICK por PostMessage: nao move cursor e nao bloqueia em avisos modais.
+    win32gui.PostMessage(botao.handle, 0x00F5, 0, 0)
+
+
 def _campo_nome_arquivo(dialogo):
     """Resolve o Edit dentro do FileNameControlHost/ComboBox do dialogo comum."""
     candidatos = []
@@ -506,7 +516,7 @@ def _exportar_xlsx(janela, destino):
     log.info("  janela Salvar Como confirmada")
     nome = _preencher_nome_arquivo(dlg, destino)
     log.info("  clicando em Salvar")
-    ButtonWrapper(dlg.child_window(title_re=r"(?i)^&?salvar$|^&?save$").wrapper_object().handle).click()
+    _salvar_dialogo(dlg)
 
     # Se o arquivo antigo não pôde ser apagado, o Windows pergunta se substitui: Sim
     try:

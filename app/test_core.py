@@ -91,6 +91,24 @@ class TestComandos(Base):
 
 
 class TestDevMaster(unittest.TestCase):
+    def test_salvar_localiza_idok_sem_depender_do_rotulo(self):
+        dialogo = mock.Mock()
+        botao = dialogo.child_window.return_value.wrapper_object.return_value
+        botao.handle = 123
+        botao.is_enabled.return_value = True
+        with mock.patch("win32gui.PostMessage") as enviar:
+            devmaster._salvar_dialogo(dialogo)
+        dialogo.child_window.assert_called_once_with(control_id=1, class_name="Button")
+        enviar.assert_called_once_with(123, 0x00F5, 0, 0)
+
+    def test_salvar_desabilitado_nao_envia_clique(self):
+        dialogo = mock.Mock()
+        dialogo.child_window.return_value.wrapper_object.return_value.is_enabled.return_value = False
+        with mock.patch("win32gui.PostMessage") as enviar:
+            with self.assertRaisesRegex(RuntimeError, "desabilitado"):
+                devmaster._salvar_dialogo(dialogo)
+        enviar.assert_not_called()
+
     def test_nome_arquivo_resolve_edit_dentro_do_host(self):
         dialogo = mock.Mock(handle=1)
         host = mock.Mock(handle=2)
