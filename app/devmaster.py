@@ -101,6 +101,14 @@ def _clicar(ctrl):
     raise RuntimeError("Este controle nao oferece acao sem mouse. Capture a tela pela aba Inspecionar para ajustar a automacao.")
 
 
+def _dialogo_nativo(pid, titulo_re):
+    desktop = Desktop(backend="win32")
+    for janela in desktop.windows(process=pid, visible_only=True, enabled_only=False):
+        if re.search(titulo_re, janela.window_text()):
+            return desktop.window(handle=janela.handle)
+    raise RuntimeError("Janela nativa ainda nao encontrada: " + titulo_re)
+
+
 def _abrir_dialogo(janela, origem, destino, timeout=20):
     """Invoke pode esperar o fechamento do modal: nunca bloquear quem deve confirma-lo."""
     pid = _processo(janela)
@@ -110,7 +118,12 @@ def _abrir_dialogo(janela, origem, destino, timeout=20):
         pythoncom.CoInitializeEx(pythoncom.COINIT_MULTITHREADED)
         try:
             # Resolver o controle na propria thread evita reutilizar interfaces COM de outra thread.
-            _clicar(_achar(pid, timeout=5, **origem))
+            if "native_title_re" in origem:
+                dialogo = _dialogo_nativo(pid, origem["native_title_re"])
+                botao = dialogo.child_window(title_re=r"(?i)^&?OK$")
+                ButtonWrapper(botao.wrapper_object().handle).click()
+            else:
+                _clicar(_achar(pid, timeout=5, **origem))
         except Exception as erro:
             falhas.put(erro)
         finally:
@@ -119,10 +132,13 @@ def _abrir_dialogo(janela, origem, destino, timeout=20):
     fim = time.monotonic() + timeout
     while time.monotonic() < fim:
         try:
+            if "native_title_re" in destino:
+                return _dialogo_nativo(pid, destino["native_title_re"])
             return _achar(pid, timeout=1, **destino)
-        except RuntimeError:
+        except Exception as busca_erro:
             if not falhas.empty():
                 raise RuntimeError("Falha ao abrir a proxima janela do relatorio.") from falhas.get()
+            time.sleep(0.2)
     raise TimeoutError("A proxima janela do relatorio nao apareceu apos o acionamento.")
 
 
@@ -327,7 +343,7 @@ def _abrir_sistema(empresa="", modulo=""):
 
 def _sair_do_sistema(janela):
     """Programa > Sair. Se houver abas abertas aparece uma mensagem: Sim."""
-    pid = janela.process_id()
+    pid = _processo(janela)
     _clicar_menu(janela, "Programa")
     # Os itens do menu Programa aparecem como botões dentro de um "Menu" suspenso
     # (não como MenuItem); busca o "Sair" dentro dele para não pegar o Sair do relatório.
@@ -453,12 +469,12 @@ def _exportar_xlsx(janela, destino):
 
     log.info("  escolhendo %s", ITEM_EXPORTAR)
     _abrir_dialogo(janela, {"title": ITEM_EXPORTAR},
-                   {"auto_id": "btnOK", "control_type": "Button"})
+                   {"native_title_re": r"(?i)XLSX"})
     log.info("  confirmando as opcoes de exportacao (OK)")
-    dlg = _abrir_dialogo(janela, {"auto_id": "btnOK", "control_type": "Button"},
-                         {"title_re": r"(?i)salvar como|save as", "control_type": "Window"})
+    dlg = _abrir_dialogo(janela, {"native_title_re": r"(?i)XLSX"},
+                         {"native_title_re": r"(?i)salvar como|save as"})
     log.info("  janela Salvar Como confirmada")
-    nome = dlg.child_window(auto_id="1001", control_type="Edit")
+    nome = dlg.child_window(control_id=1001)
     _escrever(nome, destino)
     _teclas(nome, "{TAB}")
     time.sleep(0.5)
@@ -476,7 +492,7 @@ def _exportar_xlsx(janela, destino):
     if digitado and os.path.normcase(digitado.strip()) != os.path.normcase(destino):
         raise RuntimeError(f"Não consegui preencher o nome na janela Salvar Como (ficou {digitado!r}).")
     log.info("  clicando em Salvar")
-    _clicar(dlg.child_window(title_re=r"(?i)^&?salvar$|^&?save$", control_type="Button"))
+    ButtonWrapper(dlg.child_window(title_re=r"(?i)^&?salvar$|^&?save$").wrapper_object().handle).click()
 
     # Se o arquivo antigo não pôde ser apagado, o Windows pergunta se substitui: Sim
     try:

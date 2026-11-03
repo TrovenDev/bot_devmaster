@@ -91,6 +91,14 @@ class TestComandos(Base):
 
 
 class TestDevMaster(unittest.TestCase):
+    def test_modal_nativo_e_localizado_sem_busca_uia(self):
+        modal = mock.Mock()
+        with mock.patch.object(devmaster, "_dialogo_nativo", return_value=modal), \
+             mock.patch.object(devmaster, "_achar") as uia, \
+             mock.patch.object(devmaster, "ButtonWrapper") as botao:
+            self.assertIs(devmaster._abrir_dialogo(123, {"native_title_re": "XLSX"}, {"native_title_re": "Salvar"}), modal)
+            uia.assert_not_called()
+
     def test_pid_em_cache_nao_resolve_janela_principal_modal(self):
         from types import SimpleNamespace
         janela = SimpleNamespace(_devmaster_pid=123, process_id=mock.Mock(side_effect=RuntimeError("janela indisponivel")))
