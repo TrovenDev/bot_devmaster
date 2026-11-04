@@ -10,6 +10,8 @@ from dataclasses import dataclass, replace
 from typing import Callable
 
 import devmaster
+
+SemLicenca = devmaster.SemLicenca
 from configuracao import CONFIG, PADRAO_ARQUIVO
 
 

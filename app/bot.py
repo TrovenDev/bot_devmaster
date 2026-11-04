@@ -76,6 +76,8 @@ class Bot:
             with open(arquivo, "rb") as f:
                 await msg.reply_document(f, filename=os.path.basename(arquivo), caption=assinar(cmd.titulo))
             log.info("Enviado: %s", arquivo)
+        except comandos.SemLicenca as e:
+            await msg.reply_text(assinar(str(e)))
         except comandos.Ocupado:
             await msg.reply_text(assinar("Já tem uma tarefa rodando no DevMaster, aguarde e tente de novo."))
         except comandos.Desativado:

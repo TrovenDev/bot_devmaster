@@ -74,11 +74,32 @@ function seletor(nativo) {
   return wrapper;
 }
 
+function validarCanais(dados) {
+  if (dados.evo_url) {
+    let url;
+    try { url = new URL(dados.evo_url); } catch { throw new Error("URL da Evolution invalida. Informe o endereco completo, com https:// ou http://."); }
+    if (!["https:", "http:"].includes(url.protocol) || dados.evo_url.length > 300) throw new Error("URL da Evolution invalida. Use http:// ou https://.");
+  }
+  if (dados.telegram_token && !/^[0-9]{5,15}:[A-Za-z0-9_-]{30,60}$/.test(dados.telegram_token)) throw new Error("Token do Telegram invalido. Cole o token completo do BotFather ou deixe vazio se nao usar Telegram.");
+  if (!["botoes", "texto"].includes(dados.whatsapp_menu)) throw new Error("Selecione o formato do menu do WhatsApp.");
+  if (dados.evo_instancia.length > 120) throw new Error("A instancia da Evolution deve ter ate 120 caracteres.");
+  if (dados.evo_key.length > 300) throw new Error("A API key da Evolution deve ter ate 300 caracteres.");
+  return dados;
+}
+
 function traduzir(erro) {
   const c = erro.code || "";
   const m = erro.message || String(erro);
   if (c === "23503") return "Este registro está em uso por outros dados. Remova ou mude o que depende dele antes.";
   if (c === "23505") return "Já está cadastrado.";
+  if (c === "23514" && m.includes("sistema_canais")) {
+    if (m.includes("telegram_token")) return "Token do Telegram invalido. Use o token completo do BotFather ou deixe vazio.";
+    if (m.includes("evo_url")) return "URL da Evolution invalida. Informe o endereco com http:// ou https://.";
+    if (m.includes("evo_key")) return "API key da Evolution excede o limite de 300 caracteres.";
+    if (m.includes("evo_instancia")) return "Nome da instancia da Evolution excede o limite de 120 caracteres.";
+    if (m.includes("whatsapp_menu")) return "Selecione um formato valido para o menu do WhatsApp.";
+    return "Dados dos canais rejeitados pelo banco. Confira URL, instancia, API key e token do Telegram.";
+  }
   if (c === "23514") return "Valor inválido. Confira os campos (número com DDI+DDD, ID só com números, arquivo sem pasta).";
   if (c === "23502") return "Preencha os campos obrigatórios.";
   if (c === "42501" || /permission denied|row-level security/i.test(m)) return "Sem permissão para esta operação.";
@@ -524,7 +545,7 @@ async function paginaSistema(c, idTexto) {
   const zapMenu = h("select", { id: "szm" }, h("option", { value: "botoes", selected: cn.whatsapp_menu !== "texto" }, "Botões / lista"), h("option", { value: "texto", selected: cn.whatsapp_menu === "texto" }, "Texto"));
   const tgToken = h("input", { type: "password", id: "stt", value: cn.telegram_token, maxlength: 80, autocomplete: "off", placeholder: "123456789:AA…" });
   const canais = () => ({ evo_url: evoUrl.value.trim().replace(/\/+$/, ""), evo_instancia: evoInst.value.trim(), evo_key: evoKey.value.trim(), whatsapp_menu: zapMenu.value, telegram_token: tgToken.value.trim() });
-  const salvarCanais = (id) => q(sb.from("sistema_canais").upsert({ sistema_id: id, ...canais() }));
+  const salvarCanais = (id) => q(sb.from("sistema_canais").upsert({ sistema_id: id, ...validarCanais(canais()) }));
 
   const marcados = new Map(comandosBD.map((x) => [x.comando, x]));
   const blocos = catalogo.map((info) => {
@@ -541,9 +562,16 @@ async function paginaSistema(c, idTexto) {
     btnSalvar.disabled = true;
     const ok = await tentar(async () => {
       if (!nome.value.trim()) { nome.focus(); throw new Error("Informe o nome do sistema"); }
+      validarCanais(canais());
       if (novo) {
         const r = await q(sb.rpc("criar_sistema", { p_empresa_id: empresa.value, p_nome: nome.value.trim(), p_empresa_devmaster: dmEmpresa.value.trim(), p_modulo_devmaster: dmModulo.value.trim(), p_comandos: comandos() }));
-        await salvarCanais(r.id);
+        try {
+          await salvarCanais(r.id);
+        } catch (erro) {
+          location.hash = `#/sistema/${r.id}`;
+          mostrarChave(r.chave, "Sistema criado; falta salvar os canais");
+          throw new Error(`O sistema foi criado. Guarde a chave e corrija os canais na tela de edicao: ${erro.message}`);
+        }
         location.hash = `#/sistema/${r.id}`;
         mostrarChave(r.chave, "Sistema criado");
       } else {

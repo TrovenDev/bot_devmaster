@@ -197,6 +197,8 @@ class WhatsApp:
             log.info("WhatsApp: %s enviado para %s", os.path.basename(arquivo), numero)
         except ConexaoFechada as e:
             log.warning("WhatsApp: %s Comando %s sem confirmacao de entrega; nao sera reenviado automaticamente.", e, nome)
+        except comandos.SemLicenca as e:
+            self._avisar(numero, str(e))
         except comandos.Ocupado:
             self._avisar(numero, "Já tem uma tarefa rodando no DevMaster, aguarde e tente de novo.")
         except comandos.Desativado:

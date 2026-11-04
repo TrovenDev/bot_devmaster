@@ -15,6 +15,7 @@ import time
 import threading
 import queue
 import sys
+import unicodedata
 
 from pywinauto import Application, Desktop
 from pywinauto.controls.hwndwrapper import HwndWrapper
@@ -310,6 +311,49 @@ def _selecionar_combo(pid, auto_id, desejado):
         log.warning("  não consegui confirmar a seleção de %r; seguindo com o valor atual.", desejado)
 
 
+class SemLicenca(RuntimeError):
+    def __init__(self):
+        super().__init__("O DevMaster informou: o numero de licencas excedeu. Aguarde uma licenca ser liberada e solicite o relatorio novamente.")
+
+
+def _texto_sem_acentos(texto):
+    return "".join(c for c in unicodedata.normalize("NFD", texto.casefold()) if not unicodedata.combining(c))
+
+
+def _verificar_licenca(pid):
+    janelas = _desktop().windows(process=pid)
+    for janela in janelas:
+        if not janela.is_visible() or "atenc" not in _texto_sem_acentos(janela.window_text()):
+            continue
+        textos = [janela.window_text()] + [c.window_text() for c in janela.descendants(control_type="Text")]
+        texto = _texto_sem_acentos(" ".join(textos))
+        if "numero de licencas excedeu" not in texto:
+            continue
+        log.warning("DevMaster sem licenca disponivel; confirmando aviso e encerrando acesso.")
+        try:
+            _clicar(_achar(pid, timeout=3, title_re=r"(?i)^&?OK$", control_type="Button"))
+        except Exception:
+            log.warning("Nao foi possivel confirmar o aviso de licenca.")
+        finally:
+            import win32gui
+            for principal in janelas:
+                if principal.element_info.automation_id == "FormPrincipal":
+                    try:
+                        win32gui.PostMessage(principal.handle, 0x0010, 0, 0)  # WM_CLOSE
+                    except Exception:
+                        log.warning("Nao foi possivel fechar a janela do DevMaster apos recusa de licenca.")
+        raise SemLicenca()
+
+
+def _acionar_login(pid):
+    # PostMessage nao fica bloqueado caso o login abra um aviso modal de licenca.
+    import win32gui
+    botao = _achar(pid, timeout=5, auto_id="btnAvancar", control_type="Button")
+    if not botao.handle:
+        raise RuntimeError("Botao LOGIN sem identificador nativo para acionamento.")
+    win32gui.PostMessage(botao.handle, 0x00F5, 0, 0)
+
+
 def _login(pid, empresa="", modulo=""):
     """Tela 1: usuário e senha, sem Lembrar-me / Salvar minha senha, e LOGIN.
     Tela 2: empresa (ex.: Loja/Gerencial) e módulo (Gestão Varejo Atacado) e LOGIN.
@@ -322,6 +366,7 @@ def _login(pid, empresa="", modulo=""):
     fim = time.time() + TIMEOUT
     tela1_feita = False
     while time.time() < fim:
+        _verificar_licenca(pid)
         if _no_menu_principal(pid):
             return
         try:
@@ -342,7 +387,7 @@ def _login(pid, empresa="", modulo=""):
                 for caixa in ("pictureBoxLembrarMe", "pictureBoxSalvarSenha"):
                     _clicar(_achar(pid, timeout=5, auto_id=caixa))
                 log.info("  desmarcou Lembrar-me e Salvar minha senha")
-            _clicar(_achar(pid, timeout=10, auto_id="btnAvancar", control_type="Button"))
+            _acionar_login(pid)
             tela1_feita = True
             time.sleep(2)
         elif campo_usuario is None:
@@ -350,7 +395,7 @@ def _login(pid, empresa="", modulo=""):
                 botao = _achar(pid, timeout=2, auto_id="btnAvancar", control_type="Button")
                 _selecionar_combo(pid, "lookUpEditEmpresa", empresa)
                 _selecionar_combo(pid, "lookUpEditModulo", modulo)
-                _clicar(botao)
+                _acionar_login(pid)
                 log.info("  tela de login: empresa e módulo confirmados")
                 time.sleep(3)
             except RuntimeError:

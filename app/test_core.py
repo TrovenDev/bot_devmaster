@@ -91,6 +91,31 @@ class TestComandos(Base):
 
 
 class TestDevMaster(unittest.TestCase):
+    def test_aviso_licenca_confirma_ok_fecha_e_interrompe(self):
+        aviso = mock.Mock(handle=1)
+        aviso.window_text.return_value = "Atencao!!!"
+        aviso.descendants.return_value = [mock.Mock(window_text=lambda: "O numero de licencas excedeu!")]
+        principal = mock.Mock(handle=2)
+        principal.window_text.return_value = "DevMaster Business"
+        principal.element_info.automation_id = "FormPrincipal"
+        with mock.patch.object(devmaster, "_desktop") as desktop, \
+             mock.patch.object(devmaster, "_achar") as achar, \
+             mock.patch.object(devmaster, "_clicar") as clicar, \
+             mock.patch("win32gui.PostMessage") as enviar:
+            desktop.return_value.windows.return_value = [aviso, principal]
+            with self.assertRaises(devmaster.SemLicenca):
+                devmaster._verificar_licenca(123)
+        clicar.assert_called_once_with(achar.return_value)
+        enviar.assert_called_once_with(2, 0x0010, 0, 0)
+
+    def test_licenca_liberada_nao_fecha_sistema(self):
+        janela = mock.Mock()
+        janela.window_text.return_value = "DevMaster Business"
+        with mock.patch.object(devmaster, "_desktop") as desktop, mock.patch("win32gui.PostMessage") as enviar:
+            desktop.return_value.windows.return_value = [janela]
+            devmaster._verificar_licenca(123)
+        enviar.assert_not_called()
+
     def test_salvar_localiza_idok_sem_depender_do_rotulo(self):
         dialogo = mock.Mock()
         botao = dialogo.child_window.return_value.wrapper_object.return_value
