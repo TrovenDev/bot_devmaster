@@ -16,6 +16,7 @@ import threading
 import queue
 import sys
 import unicodedata
+from concurrent.futures import Future
 
 from pywinauto import Application, Desktop
 from pywinauto.controls.hwndwrapper import HwndWrapper
@@ -348,12 +349,23 @@ def _verificar_licenca(pid):
 
 
 def _acionar_login(pid):
-    # PostMessage nao fica bloqueado caso o login abra um aviso modal de licenca.
-    import win32gui
-    botao = _achar(pid, timeout=5, auto_id="btnAvancar", control_type="Button")
-    if not botao.handle:
-        raise RuntimeError("Botao LOGIN sem identificador nativo para acionamento.")
-    win32gui.PostMessage(botao.handle, 0x00F5, 0, 0)
+    """O LOGIN personalizado exige UIA; BM_CLICK pode ser ignorado por ele."""
+    resultado = Future()
+    def acionar():
+        import pythoncom
+        inicializado = False
+        try:
+            pythoncom.CoInitializeEx(pythoncom.COINIT_MULTITHREADED)
+            inicializado = True
+            _clicar(_achar(pid, timeout=5, auto_id="btnAvancar", control_type="Button"))
+            resultado.set_result(True)
+        except Exception as erro:
+            resultado.set_exception(erro)
+        finally:
+            if inicializado:
+                pythoncom.CoUninitialize()
+    threading.Thread(target=acionar, daemon=True).start()
+    return resultado
 
 
 def _login(pid, empresa="", modulo=""):
@@ -367,10 +379,17 @@ def _login(pid, empresa="", modulo=""):
 
     fim = time.time() + TIMEOUT
     tela1_feita = False
+    acionamento = None
     while time.time() < fim:
         _verificar_licenca(pid)
         if _no_menu_principal(pid):
             return
+        if acionamento is not None:
+            if not acionamento.done():
+                time.sleep(0.3)
+                continue
+            acionamento.result()  # propaga erros do acionamento, em vez de esperar sem diagnostico
+            acionamento = None
         try:
             campo_usuario = _achar(pid, timeout=2, auto_id="textUsuario", control_type="Edit")
         except RuntimeError:
@@ -389,7 +408,8 @@ def _login(pid, empresa="", modulo=""):
                 for caixa in ("pictureBoxLembrarMe", "pictureBoxSalvarSenha"):
                     _clicar(_achar(pid, timeout=5, auto_id=caixa))
                 log.info("  desmarcou Lembrar-me e Salvar minha senha")
-            _acionar_login(pid)
+            acionamento = _acionar_login(pid)
+            log.info("  LOGIN acionado por automacao; aguardando a proxima tela")
             tela1_feita = True
             time.sleep(2)
         elif campo_usuario is None:
@@ -397,7 +417,7 @@ def _login(pid, empresa="", modulo=""):
                 botao = _achar(pid, timeout=2, auto_id="btnAvancar", control_type="Button")
                 _selecionar_combo(pid, "lookUpEditEmpresa", empresa)
                 _selecionar_combo(pid, "lookUpEditModulo", modulo)
-                _acionar_login(pid)
+                acionamento = _acionar_login(pid)
                 log.info("  tela de login: empresa e módulo confirmados")
                 time.sleep(3)
             except RuntimeError:

@@ -91,6 +91,21 @@ class TestComandos(Base):
 
 
 class TestDevMaster(unittest.TestCase):
+    def test_login_usa_acao_uia_em_vez_de_bm_click(self):
+        botao = object()
+        with mock.patch.object(devmaster, "_achar", return_value=botao) as achar, \
+             mock.patch.object(devmaster, "_clicar") as clicar, \
+             mock.patch("win32gui.PostMessage") as mensagem:
+            self.assertTrue(devmaster._acionar_login(123).result(timeout=2))
+        achar.assert_called_once_with(123, timeout=5, auto_id="btnAvancar", control_type="Button")
+        clicar.assert_called_once_with(botao)
+        mensagem.assert_not_called()
+
+    def test_login_propaga_falha_da_thread_de_acionamento(self):
+        with mock.patch.object(devmaster, "_achar", side_effect=RuntimeError("LOGIN indisponivel")):
+            with self.assertRaisesRegex(RuntimeError, "LOGIN indisponivel"):
+                devmaster._acionar_login(123).result(timeout=2)
+
     def test_abre_instancia_exclusiva_sem_reutilizar_existente(self):
         with mock.patch.object(devmaster, "_pids_devmaster", return_value={10}), \
              mock.patch.object(devmaster, "_pid_devmaster", side_effect=[None, 20]) as novo, \
