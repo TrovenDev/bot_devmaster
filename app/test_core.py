@@ -91,6 +91,25 @@ class TestComandos(Base):
 
 
 class TestDevMaster(unittest.TestCase):
+    def test_abre_instancia_exclusiva_sem_reutilizar_existente(self):
+        with mock.patch.object(devmaster, "_pids_devmaster", return_value={10}), \
+             mock.patch.object(devmaster, "_pid_devmaster", side_effect=[None, 20]) as novo, \
+             mock.patch.object(devmaster, "_achar_atalho", return_value="DevMaster.lnk"), \
+             mock.patch.object(devmaster.os, "startfile") as abrir, \
+             mock.patch.object(devmaster.time, "sleep"), \
+             mock.patch.object(devmaster, "_login") as login, \
+             mock.patch.object(devmaster, "_conectar", return_value="janela20") as conectar:
+            self.assertEqual(devmaster._abrir_sistema("Loja", "Atacado"), ("janela20", True))
+        abrir.assert_called_once_with("DevMaster.lnk")
+        novo.assert_called_with(ignorar={10})
+        login.assert_called_once_with(20, "Loja", "Atacado")
+        conectar.assert_called_once_with(20)
+
+    def test_busca_novo_pid_ignora_todas_as_instancias_anteriores(self):
+        with mock.patch.object(devmaster, "_pids_devmaster", return_value={10, 20, 30}):
+            self.assertEqual(devmaster._pid_devmaster({10, 20}), 30)
+            self.assertIsNone(devmaster._pid_devmaster({10, 20, 30}))
+
     def test_aviso_licenca_confirma_ok_fecha_e_interrompe(self):
         aviso = mock.Mock(handle=1)
         aviso.window_text.return_value = "Atencao!!!"

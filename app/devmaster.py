@@ -44,8 +44,8 @@ def _desktop():
     return Desktop(backend="uia")
 
 
-def _conectar():
-    app = Application(backend="uia").connect(title_re=JANELA_PRINCIPAL, timeout=15)
+def _conectar(pid):
+    app = Application(backend="uia").connect(process=pid, timeout=15)
     janela = app.window(title_re=JANELA_PRINCIPAL)
     janela._devmaster_pid = app.process
     if janela.is_minimized():
@@ -204,20 +204,22 @@ def _teclas(ctrl, teclas):
         raise RuntimeError("Controle nao aceita teclas em segundo plano; requer ajuste pela aba Inspecionar.") from erro
 
 
-def _pid_devmaster():
-    """Processo do DevMaster: qualquer janela com 'devmaster' no título (o nome do
-    sistema pode mudar, mas sempre tem 'devmaster')."""
-    # Exige o formulário do sistema (auto_id FormPrincipal, usado no login e no menu):
-    # só o título pegaria também uma pasta "DevMaster" aberta no Explorer, ou este painel.
-    for w in _desktop().windows():
+def _pids_devmaster():
+    processos = set()
+    for janela in _desktop().windows():
         try:
-            if ("devmaster" in w.window_text().lower()
-                    and w.element_info.automation_id == "FormPrincipal"
-                    and w.process_id() != os.getpid()):
-                return w.process_id()
+            if ("devmaster" in janela.window_text().lower()
+                    and janela.element_info.automation_id == "FormPrincipal"
+                    and janela.process_id() != os.getpid()):
+                processos.add(janela.process_id())
         except Exception:
             pass
-    return None
+    return processos
+
+
+def _pid_devmaster(ignorar=()):
+    novos = _pids_devmaster() - set(ignorar)
+    return min(novos) if novos else None
 
 
 def _no_menu_principal(pid):
@@ -406,24 +408,22 @@ def _login(pid, empresa="", modulo=""):
 
 
 def _abrir_sistema(empresa="", modulo=""):
-    """Abre o DevMaster (se já estiver aberto, reaproveita) e faz o login.
-    Devolve (janela principal, True se fomos nós que abrimos)."""
-    pid = _pid_devmaster()
-    fomos_nos = False
+    """Abre uma instancia exclusiva; nunca assume uma sessao de outro usuario."""
+    existentes = _pids_devmaster()
+    atalho = _achar_atalho()
+    log.info("  abrindo instancia do bot: %s (ignorando %d processo(s) existente(s))", atalho, len(existentes))
+    os.startfile(atalho)
+    fim = time.monotonic() + TIMEOUT
+    pid = None
+    while pid is None and time.monotonic() < fim:
+        time.sleep(1)
+        pid = _pid_devmaster(ignorar=existentes)
     if pid is None:
-        atalho = _achar_atalho()
-        log.info("  abrindo o DevMaster: %s", atalho)
-        os.startfile(atalho)
-        fomos_nos = True
-        fim = time.time() + TIMEOUT
-        while pid is None and time.time() < fim:
-            time.sleep(1)
-            pid = _pid_devmaster()
-        if pid is None:
-            raise TimeoutError("O DevMaster não abriu.")
-        time.sleep(3)
+        raise TimeoutError("Nao apareceu uma nova instancia do DevMaster para o bot. O sistema pode impedir multiplas instancias. A sessao que ja estava aberta foi preservada.")
+    log.info("  instancia exclusiva do bot identificada: processo %s", pid)
+    time.sleep(3)
     _login(pid, empresa, modulo)
-    return _conectar(), fomos_nos
+    return _conectar(pid), True
 
 
 def _sair_do_sistema(janela):
