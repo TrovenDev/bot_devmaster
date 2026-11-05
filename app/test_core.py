@@ -91,6 +91,31 @@ class TestComandos(Base):
 
 
 class TestDevMaster(unittest.TestCase):
+    def test_layout_ja_correto_nao_exige_abertura_da_lista(self):
+        combo = mock.Mock()
+        with mock.patch.object(devmaster, "_valor_combo", return_value="Geral"), mock.patch.object(devmaster, "_clicar") as clicar:
+            devmaster._selecionar_layout(mock.Mock(), combo)
+        combo.select.assert_not_called()
+        clicar.assert_not_called()
+
+    def test_layout_selecionado_diretamente_sem_cursor(self):
+        combo = mock.Mock()
+        with mock.patch.object(devmaster, "_valor_combo", side_effect=["Outro", "Geral"]), mock.patch.object(devmaster, "_clicar") as clicar:
+            devmaster._selecionar_layout(mock.Mock(), combo)
+        combo.select.assert_called_once_with("Geral")
+        clicar.assert_not_called()
+
+    def test_layout_sem_acao_uia_abre_lista_com_f4(self):
+        combo, opcao = mock.Mock(), mock.Mock()
+        combo.select.side_effect = RuntimeError("sem select")
+        with mock.patch.object(devmaster, "_valor_combo", side_effect=["Outro", "Geral"]), \
+             mock.patch.object(devmaster, "_escrever", side_effect=RuntimeError("somente leitura")), \
+             mock.patch.object(devmaster, "_clicar", side_effect=[RuntimeError("sem invoke"), None]), \
+             mock.patch.object(devmaster, "_achar", return_value=opcao), \
+             mock.patch.object(devmaster, "_teclas") as teclas:
+            devmaster._selecionar_layout(mock.Mock(), combo)
+        teclas.assert_called_once_with(combo, "{F4}")
+
     def test_login_usa_acao_uia_em_vez_de_bm_click(self):
         botao = object()
         with mock.patch.object(devmaster, "_achar", return_value=botao) as achar, \

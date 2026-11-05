@@ -531,6 +531,34 @@ def _valor_combo(combo):
     return ""
 
 
+def _selecionar_layout(janela, combo):
+    def confirmado():
+        return _valor_combo(combo).strip().casefold() == LAYOUT.casefold()
+    if confirmado():
+        return
+    log.info("  selecionando Nome Layout: %s", LAYOUT)
+    for acao in (lambda: combo.select(LAYOUT), lambda: _escrever(combo, LAYOUT)):
+        try:
+            acao()
+            if confirmado():
+                return
+        except Exception:
+            pass
+    try:
+        _clicar(combo)
+    except RuntimeError:
+        log.info("  abrindo lista de layouts por F4 no proprio controle")
+        _teclas(combo, "{F4}")
+    opcao = _achar(janela, timeout=5, title=LAYOUT)
+    _clicar(opcao)
+    fim = time.monotonic() + 5
+    while time.monotonic() < fim:
+        if confirmado():
+            return
+        time.sleep(0.2)
+    raise RuntimeError("Nao foi possivel confirmar Nome Layout = Geral. Nenhum relatorio foi exportado com layout diferente.")
+
+
 def _preencher_filtros(janela):
     # A tela de filtros é uma janela filha da principal (auto_id "ucForm"), não uma
     # janela de nível superior, e os campos têm auto_id próprio.
@@ -539,15 +567,7 @@ def _preencher_filtros(janela):
 
     # Nome Layout: se já está em "Geral" não mexe; senão abre a lista e escolhe
     combo = filtros.child_window(auto_id="edit_nome_layout", control_type="ComboBox")
-    if LAYOUT.lower() not in _valor_combo(combo).lower():
-        _clicar(combo)
-        time.sleep(0.6)
-        try:
-            _clicar(_achar(janela, timeout=3, title=LAYOUT))
-        except RuntimeError:
-            _escrever(combo, LAYOUT)
-            _teclas(combo, "{ENTER}")
-        time.sleep(0.4)
+    _selecionar_layout(janela, combo)
 
     # Tab. Preços: sempre 001 (seleciona tudo e digita por cima)
     preco = filtros.child_window(auto_id="edit_tab_preco", control_type="Edit")
